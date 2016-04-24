@@ -5,6 +5,7 @@ import numpy as np
 from sklearn.datasets import load_svmlight_file
 
 if __name__ == '__main__':
+    # The following is synthesized data for testing
     # y: (ns+nt): true_values
     # f: (ns+nt): prediction
     # K: (ns+nt) * (ns+nt), basic kernel, which could also be the i~j indicator
@@ -40,13 +41,15 @@ if __name__ == '__main__':
                 continue
             coeff = 2 * K[i, j] * U[i,:].dot(U[j,:].T)[0,0]
             grad += U[j,:] * coeff
-        # grad +=
         return grad
 
     def grad_f():
-         grad = I * (f - y) * 2
-         grad += np.asarray(U.dot(U.T).dot(f)).flatten() * 2
-         return grad
+        K_approx = U.dot(U.T)
+        D = np.asarray(K_approx.sum(1)).flatten()
+        lap = D - K_approx
+        grad = I * (f - y) * 2
+        grad += np.asarray(lap.dot(f)).flatten() * 2
+        return grad
 
     # doing optimization
     max_iter = 1
