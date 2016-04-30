@@ -7,11 +7,21 @@ from sklearn.datasets import load_svmlight_file
 from sklearn.metrics.pairwise import rbf_kernel
 from configure_path import *
 
+# keep the `nn` nearest neighbor for each row
+# nn is # nearest neighbor to keep
+def sparsify_K(K, nn):
+    ret_K = np.zeros(K.shape)
+    for i in xrange(K.shape[0]):
+        index = np.argsort(K[i, :])[-nn:]
+        ret_K[i, index] = K[i, index]
+    return ret_K
+
 # Load the data
 # return values:
 # y: (ns+nt): true_values
 # I: (ns+nt) observation indicator
 # K: (ns+nt) * (ns+nt), basic kernel, which could also be the i~j indicator
+# offset: [source_train , ... , target_para] offset number
 def load_data(source_train, source_test, source_para,
               target_train, target_test, target_para):
     source_n_features = 100000
@@ -20,13 +30,14 @@ def load_data(source_train, source_test, source_para,
     # source_domain, target_domain dimension should be fixed
 
     source_train_X, source_train_y = load_svmlight_file(source_train, n_features=source_n_features)
-    source_test_X, _ = load_svmlight_file(source_test, n_features=source_n_features)
+    source_test_X, source_test_y = load_svmlight_file(source_test, n_features=source_n_features)
     source_para_X, _ = load_svmlight_file(source_para, n_features=source_n_features, multilabel=True)
 
     target_train_X, target_train_y = load_svmlight_file(target_train, n_features=target_n_features)
-    target_test_X, _ = load_svmlight_file(target_test, n_features=target_n_features)
+    target_test_X, target_test_y = load_svmlight_file(target_test, n_features=target_n_features)
     target_para_X, _ = load_svmlight_file(target_para, n_features=target_n_features, multilabel=True)
-
+    ##### default gamma value is taken to be sqrt of the data dimension
+    ##### May need to tune and change the calculation of
     source_gamma = 1.0 / np.sqrt(source_train_X.shape[1])
     target_gamma = 1.0 / np.sqrt(target_train_X.shape[1])
 
@@ -41,8 +52,8 @@ def load_data(source_train, source_test, source_para,
     len_X = [source_train_X.shape[0] , source_test_X.shape[0] , source_para_X.shape[0]
             , target_train_X.shape[0] , target_test_X.shape[0] , target_para_X.shape[0]]
     offset = np.cumsum(len_X)
-    print offset
-    print len_X
+    print 'offset\t', offset
+    print '# instance ', len_X
 
     # K initialize
     n = offset[5]
@@ -62,10 +73,17 @@ def load_data(source_train, source_test, source_para,
     # true values
     y = np.zeros(n, dtype=np.float)
     y[0:offset[0]] = source_train_y
+    y[offset[0]:offset[1]] = source_test_y
     y[offset[2]:offset[3]] = target_train_y
+    y[offset[3]:offset[4]] = target_test_y
 
-    return y, I, K
-
+    return y, I, K, offset
+# Load the data
+# return values:
+# y: (ns+nt): true_values
+# I: (ns+nt) observation indicator
+# K: (ns+nt) * (ns+nt), basic kernel, which could also be the i~j indicator
+# offset: [source_train , ... , target_para] offset number
 def default_y_I_K():
     source_train = srcPath + '.trn.libsvm'
     source_test = srcPath + '.tst.libsvm'
@@ -75,9 +93,49 @@ def default_y_I_K():
     target_test = tgtPath + '.tst.libsvm'
     target_para = prlPath + 'tgt.toy.libsvm'
 
-    y, I, K = load_data(source_train, source_test, source_para,
+    y, I, K, offset = load_data(source_train, source_test, source_para,
                   target_train, target_test, target_para)
-    return y, I, K
+    return y, I, K, offset
+
+# Load the target [train,test] data (no parallel)
+# return values:
+# y: (ns+nt): true_values
+# I: (ns+nt) observation indicator
+# K: (ns+nt) * (ns+nt), basic kernel, which could also be the i~j indicator
+# offset: [train, test] offset
+def get_target_y_I_K(gamma=None):
+    target_train = tgtPath + '.trn.libsvm'
+    target_test = tgtPath + '.tst.libsvm'
+    target_n_features = 200000
+
+    target_train_X, target_train_y = load_svmlight_file(target_train, n_features=target_n_features)
+    target_test_X, target_test_y = load_svmlight_file(target_test, n_features=target_n_features)
+
+    len_X = [target_train_X.shape[0] , target_test_X.shape[0]]
+    offset = np.cumsum(len_X)
+
+    if gamma == None:
+        target_gamma = 1.0 / np.sqrt(target_train_X.shape[1]) # or target_data
+    else:
+        target_gamma = gamma
+
+    n = offset[1]
+
+    target_data = sp.vstack([target_train_X, target_test_X])
+    target_ker = rbf_kernel(target_data, gamma=target_gamma)
+
+    y = np.zeros(n, dtype=np.float)
+    y[0:offset[0]] = target_train_y
+    y[offset[0]:offset[1]] = target_test_y
+
+    I = np.zeros(n, dtype=np.float)
+    I[0:offset[0]] = np.ones(len_X[0], dtype=np.float)
+
+    K = target_ker
+    print 'offset\t', offset
+    return y, I, K, offset
+
+# for testing
 if __name__ == '__main__':
 
 
