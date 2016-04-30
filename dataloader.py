@@ -52,8 +52,8 @@ def load_data(source_train, source_test, source_para,
     len_X = [source_train_X.shape[0] , source_test_X.shape[0] , source_para_X.shape[0]
             , target_train_X.shape[0] , target_test_X.shape[0] , target_para_X.shape[0]]
     offset = np.cumsum(len_X)
-    print 'offset\t', offset
-    print '# instance ', len_X
+    # print 'offset\t', offset
+    # print '# instance ', len_X
 
     # K initialize
     n = offset[5]
@@ -132,7 +132,7 @@ def get_target_y_I_K(gamma=None):
     I[0:offset[0]] = np.ones(len_X[0], dtype=np.float)
 
     K = target_ker
-    print 'offset\t', offset
+    # print 'offset\t', offset
     return y, I, K, offset
 
 # for testing
