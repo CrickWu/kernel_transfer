@@ -7,21 +7,20 @@
 # The tuning parameters `w_2` for coefficient for regularization term. (we use default gamme, which is the sqrt of dimension for each domain)
 
 import numpy as np
-from joblib import Parallel, delayed
-from dataloader import default_y_I_K, get_target_y_I_K
 from sklearn.datasets import load_svmlight_file
 from sklearn.metrics import average_precision_score
+from dataclass import DataClass
 
 np.random.seed(123)
 if __name__ == '__main__':
-    y, I, K, offset = default_y_I_K()
+    dc = DataClass()
+    y, I, K, offset = dc.load_data()
 
     n = len(y)
     # weighting coefficient for the second term
     # w_2 = 100000.0 / n
 
     f = np.zeros(n)
-    # y, I, K, offset = get_target_y_I_K(gamma=gamma)
     for i in xrange(-10, 20):
         w_2 = 2.0**i
         # closed form

@@ -23,7 +23,8 @@ def sparsify_K(K, nn):
 # K: (ns+nt) * (ns+nt), basic kernel, which could also be the i~j indicator
 # offset: [source_train , ... , target_para] offset number
 def load_data(source_train, source_test, source_para,
-              target_train, target_test, target_para):
+              target_train, target_test, target_para,
+              source_gamma = None, target_gamma = None):
     source_n_features = 100000
     target_n_features = 200000
 
@@ -38,8 +39,10 @@ def load_data(source_train, source_test, source_para,
     target_para_X, _ = load_svmlight_file(target_para, n_features=target_n_features, multilabel=True)
     ##### default gamma value is taken to be sqrt of the data dimension
     ##### May need to tune and change the calculation of
-    source_gamma = 1.0 / np.sqrt(source_train_X.shape[1])
-    target_gamma = 1.0 / np.sqrt(target_train_X.shape[1])
+    if source_gamma == None:
+        source_gamma = 1.0 / np.sqrt(source_train_X.shape[1])
+    if target_gamma == None:
+        target_gamma = 1.0 / np.sqrt(target_train_X.shape[1])
 
     source_data = sp.vstack([source_train_X, source_test_X, source_para_X])
     source_ker = rbf_kernel(source_data, gamma=source_gamma)
