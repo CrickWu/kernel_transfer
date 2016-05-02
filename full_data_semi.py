@@ -92,7 +92,7 @@ if __name__ == '__main__':
                 auc, ap, rl = solve_and_eval(y, I, K_comp, offset, w_2)
                 print('TL_Complete: log_2gs %3d log_2gt %3d log_2w %3d sparsity 000 auc %6f ap %6f rl %6f' % (g_s, g_t, i, auc, ap, rl))
                 if ap > best_ap_complete:
-                    best_ap_complete = ap
+                    best_auc_complete = auc
                     best_gs_complete = g_s
                     best_gt_complete = g_t
                     best_i_complete = i
@@ -111,7 +111,7 @@ if __name__ == '__main__':
                     K_sp = DataClass.sym_sparsify_K(K_comp, j)
                     print('TL_Complete: log_2gs %3d log_2gt %3d log_2w %3d sparsity %3d auc %6f ap %6f rl %6f' % (g_s, g_t, i, j, auc, ap, rl))
                     if ap > best_ap_complete:
-                        best_ap_complete = ap
+                        best_auc_complete = auc
                         best_gs_complete = g_s
                         best_gt_complete = g_t
                         best_i_complete = i
