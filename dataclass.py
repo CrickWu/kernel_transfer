@@ -91,7 +91,6 @@ class DataClass:
                 , target_train_X.shape[0] , target_test_X.shape[0] , target_para_X.shape[0]]
         offset = np.cumsum(len_X)
         # print 'offset\t', offset
-        # print '# instance ', len_X
 
         # K initialize
         n = offset[5]
@@ -148,6 +147,20 @@ class DataClass:
         I[0:offset[0]] = np.ones(len_X[0], dtype=np.float)
 
         K = target_ker
+        return y, I, K, offset
+
+    def get_manual_complete_data(self):
+        y, I, K, offset = self.load_data()
+        # source_train, source_test, source_para
+        #            0,           1,           2
+        # target_train, target_test, target_para
+        #            3,           4,           5
+        # complete target parallel
+        K[offset[4]:offset[5], 0:offset[1]] = K[offset[1]: offset[2], 0:offset[1]]
+        K[offset[2]:offset[4], offset[1]:offset[2]] = K[offset[2]: offset[4], offset[4]:offset[5]]
+        K[offset[4]:offset[5], offset[1]:offset[2]] = (K[offset[1]: offset[2], offset[1]:offset[2]] +  K[offset[4]: offset[5], offset[4]:offset[5]]) / 2
+
+        K[0:offset[2], offset[2]:offset[5]] = K[offset[2]:offset[5], 0:offset[2]].transpose()
         return y, I, K, offset
 
 # for testing
