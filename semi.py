@@ -25,6 +25,30 @@ def evalulate(y_true, y_prob):
     return auc, ap, rl
 
 
+def solve_and_eval(y, I, K, offset, w_2):
+    # closed form
+    D = np.diag( K.sum(1) )
+    lap = D - K
+
+    A = lap * w_2 + np.diag( I )
+    b = I * y
+    # solve equation Af = b for exact solution of `f`
+    f = np.linalg.lstsq(A,b)[0]
+
+    # for calculating ap
+    start_offset = offset[0]
+    end_offset = offset[1]
+
+    #loss1 = ((f - y)**2 * I).sum()
+    #loss2 = f.T.dot(lap).dot(f) * w_2
+    #loss = loss1+loss2
+
+    #ap = average_precision_score(y[start_offset:end_offset], f[start_offset:end_offset])
+    y_true = y[start_offset:end_offset]
+    y_prob = f[start_offset:end_offset]
+    auc, ap, rl = evalulate(y_true, y_prob)
+    return auc, ap, rl
+
 if __name__ == '__main__':
 
     dc = DataClass()
@@ -41,30 +65,15 @@ if __name__ == '__main__':
     best_j = 0.0
 
 
-    for g in xrange(-12, 0, 2):
+    # for g in xrange(-12, 0, 2):
+    for g in xrange(-12, -10, 2):
         dc.target_gamma = 2**g
         y, I, K, offset = dc.get_SSL_Kernel()
 
         for i in xrange(-12, 10, 2):
             # weighting coefficient for the second term
             w_2 = 2.0**i
-            # closed form
-            D = np.diag( K.sum(1) )
-            lap = D - K
-
-            A = lap * w_2 + np.diag( I )
-            b = I * y
-            f = np.linalg.lstsq(A,b)[0]
-
-            start_offset = I.sum()
-
-            loss1 = ((f - y)**2 * I).sum() # prediction loss
-            loss2 = f.T.dot(lap).dot(f) * w_2 # regularization loss
-            loss = loss1+loss2
-
-            y_true = y[start_offset:]
-            y_prob = f[start_offset:]
-            auc, ap, rl = evalulate(y_true, y_prob)
+            auc, ap, rl = solve_and_eval(y, I, K, offset, w_2)
             print('log_2g %3d log_2w %3d sparsity 000 auc %6f ap %6f rl %6f' % (g, i, auc, ap, rl))
             if auc > best_auc:
                 best_auc = auc
@@ -75,24 +84,7 @@ if __name__ == '__main__':
 
             for j in [10, 20, 40, 80, 160, 320, 500]:
                 K_sp = DataClass.sym_sparsify_K(K, j)
-
-                # sparse
-                D = np.diag( K_sp.sum(1) )
-                lap = D - K_sp
-
-                A = lap * w_2 + np.diag( I )
-                b = I * y
-                f = np.linalg.lstsq(A,b)[0]
-
-                start_offset = I.sum()
-
-                loss1 = ((f - y)**2 * I).sum()
-                loss2 = f.T.dot(lap).dot(f) * w_2
-                loss = loss1+loss2
-                
-                y_true = y[start_offset:]
-                y_prob = f[start_offset:]
-                auc, ap, rl = evalulate(y_true, y_prob)
+                auc, ap, rl = solve_and_eval(y, I, K_sp, offset, w_2)
                 print('log_2g %3d log_2w %3d sparsity %3d auc %6f ap %6f rl %6f' \
                         % (g, i, j, auc, ap, rl))
                 if auc > best_auc:
