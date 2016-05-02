@@ -15,7 +15,8 @@ class DataClass:
     # feature dimension: source_n_features, target_n_features
     # kernel: source_gamma, target_gamma
     # kernel_type: 'rbf', 'cosine'
-    def __init__(self, srcPath=None, tgtPath=None, prlPath=None,
+    # valid_flag: use .val.libsvm for grid search, or use .tst.libsvm for reporting final results
+    def __init__(self, srcPath=None, tgtPath=None, prlPath=None, valid_flag=True,
                 source_n_features=100000, target_n_features=200000, kernel_type='cosine',
                 source_gamma=None, target_gamma=None):
         if srcPath == None:
@@ -27,6 +28,7 @@ class DataClass:
         self.source_n_features = source_n_features
         self.target_n_features = target_n_features
         self.kernel_type = kernel_type
+        self.valid_flag = valid_flag
         if source_gamma == None:
             self.source_gamma = 1.0 / np.sqrt(source_n_features)
         if target_gamma == None:
@@ -69,6 +71,8 @@ class DataClass:
         target_train = self.tgtPath + '.trn.libsvm'
         target_test = self.tgtPath + '.val.libsvm'
         target_para = self.prlPath + 'prlTgt.libsvm'
+        if self.valid_flag == False:
+            target_test = self.tgtPath + '.tst.libsvm'
 
         # source_domain, target_domain dimension should be fixed
 
@@ -134,6 +138,8 @@ class DataClass:
     def get_SSL_Kernel(self):
         target_train = self.tgtPath + '.trn.libsvm'
         target_test = self.tgtPath + '.val.libsvm'
+        if self.valid_flag == False:
+            target_test = self.tgtPath + '.tst.libsvm'
 
         target_train_X, target_train_y = load_svmlight_file(target_train, n_features=self.target_n_features)
         target_test_X, target_test_y = load_svmlight_file(target_test, n_features=self.target_n_features)

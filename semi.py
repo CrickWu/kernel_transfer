@@ -59,10 +59,7 @@ def grid_search(gList, wList, pList, kernel_type):
     dc = DataClass()
     dc.kernel_type = kernel_type
     y, I, K, offset = dc.get_SSL_Kernel()
-    start_offset = offset[0] # for calculating `ap`
 
-    n = len(y)
-    f = np.zeros(n)
     best_auc = 0.0
     best_g = 0.0
     best_w = 0.0
@@ -103,7 +100,24 @@ def grid_search(gList, wList, pList, kernel_type):
     print('best parameters: log_2g %3d log_2w %3d log_2p %3d auc %6f' \
             % (best_g, best_w, best_p, best_auc))
 
-   
+
+def run_testset(kernel_type='cosine', log_2g=-12, log_2w=-12, log_2p=6):
+    dc = DataClass(valid_flag=False)
+    dc.kernel_type = kernel_type
+    dc.target_gamma = 2**log_2g
+    y, I, K, offset = dc.get_SSL_Kernel()
+    
+    w_2 = 2**log_2w
+    p = 2**log_2p
+    
+    # log_2p == -1 means that using full kernel w/o sparsify
+    if log_2p != -1:
+        K = DataClass.sym_sparsify_K(K, p)
+    
+    auc, ap, rl = solve_and_eval(y, I, K, offset, w_2)
+    print('tst test: auc %6f ap %6f rl %6f' %(auc, ap, rl))
+
+
 if __name__ == '__main__':
     #kernel_type = 'cosine'
     kernel_type = 'rbf'
@@ -116,5 +130,6 @@ if __name__ == '__main__':
     
     wList = np.arange(-12, 10, 2)
     pList = np.arange(4, 10, 1)
-    grid_search(gList, wList, pList, kernel_type)
-
+    #grid_search(gList, wList, pList, kernel_type)
+    #run_testset(kernel_type='cosine', log_2g=-12, log_2w=-12, log_2p=6)
+    run_testset(kernel_type='rbf', log_2g=-6, log_2w=8, log_2p=5)
