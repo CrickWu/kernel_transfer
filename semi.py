@@ -7,15 +7,15 @@
 # and number of nearest neighbor to make the kernel sparse.
 
 import numpy as np
-from joblib import Parallel, delayed
-from dataloader import default_y_I_K, get_target_y_I_K, sparsify_K
 from sklearn.datasets import load_svmlight_file
 from sklearn.metrics import average_precision_score
+from dataclass import DataClass
 
 np.random.seed(123)
 if __name__ == '__main__':
 
-    y, I, K, offset = get_target_y_I_K()
+    dc = DataClass()
+    y, I, K, offset = dc.get_target_y_I_K()
     start_offset = offset[0] # for calculating `ap`
 
     n = len(y)
@@ -25,7 +25,8 @@ if __name__ == '__main__':
 
     for g in xrange(-10, -4):
         gamma = 2.0**g
-        y, I, K, offset = get_target_y_I_K(gamma=gamma)
+        dc.target_gamma = gamma
+        y, I, K, offset = dc.get_target_y_I_K()
 
         for i in xrange(-10, 10):
             # weighting coefficient for the second term
@@ -49,8 +50,7 @@ if __name__ == '__main__':
 
 
             for j in [10, 20, 40, 80, 160, 320, 500]:
-                K_sp = sparsify_K(K, j)
-                K_sp = (K_sp+K_sp.T) / 2 # in case of non-positive semi-definite
+                K_sp = DataClass.sym_sparsify_K(K, j)
 
                 # sparse
                 D = np.diag( K_sp.sum(1) )
@@ -63,7 +63,7 @@ if __name__ == '__main__':
                 start_offset = I.sum()
 
                 loss1 = ((f - y)**2 * I).sum()
-                loss2 = f.T.dot(lap).dot(f) * w_2 # why the loss is negative
+                loss2 = f.T.dot(lap).dot(f) * w_2
                 loss = loss1+loss2
 
                 print 'gamma: {} w_2: {}'.format(gamma, w_2), 'loss:', loss1, loss2, loss
