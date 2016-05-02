@@ -5,7 +5,7 @@ import numpy as np
 import scipy.sparse as sp
 import configure_path
 from sklearn.datasets import load_svmlight_file
-from sklearn.metrics.pairwise import rbf_kernel
+from sklearn.metrics.pairwise import rbf_kernel, cosine_similarity
 
 class DataClass:
     # attributes:
@@ -14,8 +14,9 @@ class DataClass:
     #   default values are inherited from configure_path
     # feature dimension: source_n_features, target_n_features
     # kernel: source_gamma, target_gamma
+    # kernel_type: 'rbf', 'cosine'
     def __init__(self, srcPath=None, tgtPath=None, prlPath=None,
-                source_n_features=100000, target_n_features=200000,
+                source_n_features=100000, target_n_features=200000, kernel_type='cosine',
                 source_gamma=None, target_gamma=None):
         if srcPath == None:
             self.srcPath = configure_path.srcPath
@@ -25,10 +26,16 @@ class DataClass:
             self.prlPath = configure_path.prlPath
         self.source_n_features = source_n_features
         self.target_n_features = target_n_features
+        self.kernel_type = kernel_type
         if source_gamma == None:
             self.source_gamma = 1.0 / np.sqrt(source_n_features)
         if target_gamma == None:
             self.target_gamma = 1.0 / np.sqrt(target_n_features)
+    def kernel(self, data, **parameters):
+        if self.kernel_type == 'cosine':
+            return cosine_similarity(data)
+        elif self.kernel_type == 'rbf':
+            return rbf_kernel(data, gamma=parameters['gamma'])
 
     # keep the `nn` nearest neighbor for each row
     # nn is # nearest neighbor to keep
@@ -80,12 +87,13 @@ class DataClass:
         #     target_gamma = 1.0 / np.sqrt(target_train_X.shape[1])
 
         source_data = sp.vstack([source_train_X, source_test_X, source_para_X])
-        source_ker = rbf_kernel(source_data, gamma=self.source_gamma)
-        # source_ker = rbf_kernel(source_data)
+        # source_ker = rbf_kernel(source_data, gamma=self.source_gamma)
+        source_ker = self.kernel(source_data, gamma=self.source_gamma)
+
 
         target_data = sp.vstack([target_train_X, target_test_X, target_para_X])
-        target_ker = rbf_kernel(target_data, gamma=self.target_gamma)
-        # target_ker = rbf_kernel(target_data)
+        # target_ker = rbf_kernel(target_data, gamma=self.target_gamma)
+        target_ker = self.kernel(target_data, gamma=self.target_gamma)
 
         len_X = [source_train_X.shape[0] , source_test_X.shape[0] , source_para_X.shape[0]
                 , target_train_X.shape[0] , target_test_X.shape[0] , target_para_X.shape[0]]
@@ -136,7 +144,8 @@ class DataClass:
         n = offset[1]
 
         target_data = sp.vstack([target_train_X, target_test_X])
-        target_ker = rbf_kernel(target_data, gamma=self.target_gamma)
+        # target_ker = rbf_kernel(target_data, gamma=self.target_gamma)
+        target_ker = self.kernel(target_data, gamma=self.target_gamma)
 
         y = np.zeros(n, dtype=np.float)
         y[0:offset[0]] = target_train_y
