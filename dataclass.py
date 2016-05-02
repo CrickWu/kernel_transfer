@@ -54,14 +54,14 @@ class DataClass:
     # I: (ns+nt) observation indicator
     # K: (ns+nt) * (ns+nt), basic kernel, which could also be the i~j indicator
     # offset: [source_train , ... , target_para] offset number
-    def load_data(self):
+    def get_TL_Kernel(self):
         source_train = self.srcPath + '.trn.libsvm'
-        source_test = self.srcPath + '.tst.libsvm'
-        source_para = self.prlPath + 'src.toy.libsvm'
+        source_test = self.srcPath + '.val.libsvm' # val is for tuning hyperparameters, in final should report on tst
+        source_para = self.prlPath + 'prlSrc.libsvm'
 
         target_train = self.tgtPath + '.trn.libsvm'
-        target_test = self.tgtPath + '.tst.libsvm'
-        target_para = self.prlPath + 'tgt.toy.libsvm'
+        target_test = self.tgtPath + '.val.libsvm'
+        target_para = self.prlPath + 'prlTgt.libsvm'
 
         # source_domain, target_domain dimension should be fixed
 
@@ -123,9 +123,9 @@ class DataClass:
     # I: (ns+nt) observation indicator
     # K: (ns+nt) * (ns+nt), basic kernel, which could also be the i~j indicator
     # offset: [train, test] offset
-    def get_target_y_I_K(self):
+    def get_SSL_Kernel(self):
         target_train = self.tgtPath + '.trn.libsvm'
-        target_test = self.tgtPath + '.tst.libsvm'
+        target_test = self.tgtPath + '.val.libsvm'
 
         target_train_X, target_train_y = load_svmlight_file(target_train, n_features=self.target_n_features)
         target_test_X, target_test_y = load_svmlight_file(target_test, n_features=self.target_n_features)
@@ -149,18 +149,25 @@ class DataClass:
         K = target_ker
         return y, I, K, offset
 
-    def get_manual_complete_data(self):
-        y, I, K, offset = self.load_data()
+    @staticmethod
+    def complete_TL_Kernel(K_ori, offset):
         # source_train, source_test, source_para
         #            0,           1,           2
         # target_train, target_test, target_para
         #            3,           4,           5
+        K = K_ori.copy()
         # complete target parallel
         K[offset[4]:offset[5], 0:offset[1]] = K[offset[1]: offset[2], 0:offset[1]]
         K[offset[2]:offset[4], offset[1]:offset[2]] = K[offset[2]: offset[4], offset[4]:offset[5]]
         K[offset[4]:offset[5], offset[1]:offset[2]] = (K[offset[1]: offset[2], offset[1]:offset[2]] +  K[offset[4]: offset[5], offset[4]:offset[5]]) / 2
 
         K[0:offset[2], offset[2]:offset[5]] = K[offset[2]:offset[5], 0:offset[2]].transpose()
+        return K
+
+
+    def get_TL_Kernel_completeOffDiag(self):
+        y, I, K, offset = self.load_data()
+        K = DataClass.complete_TL_Kernel(K, offset)
         return y, I, K, offset
 
 # for testing
