@@ -1,5 +1,7 @@
 ## dataloader.py
 Load data from fixed path
+## dataclass.py
+class of kernel 
 ## sgd.py
 Using GD to predict `U` and `f` simultaneously. This file does not work out well due to the poor approximation `U` right now, so we may need to pend the modification after we get some useful results on using the exact kernel `K` first.
 ## semi.py
