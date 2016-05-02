@@ -49,76 +49,100 @@ def solve_and_eval(y, I, K, offset, w_2):
     auc, ap, rl = evalulate(y_true, y_prob)
     return auc, ap, rl
 
-if __name__ == '__main__':
+
+# grid search hyperparameter on valid set
+# gList: gamma for rbf kernel
+# wList: weight for Manifold regularization term
+# pList: sparsity for kernel (p-nearest neighbor)
+# kernel_type: rbf or cosine
+# complete_flag: 1 or 0 (default 0), whether complete K_st and K_ts block of kernel or not 
+def grid_search(gList, wList, pList, kernel_type, complete_flag=0):
     dc = DataClass()
+    dc.kernel_type = kernel_type
     y, I, K, offset = dc.get_TL_Kernel()
 
     n = len(y)
-    # weighting coefficient for the second term
-    # w_2 = 100000.0 / n
-
     f = np.zeros(n)
     best_auc = 0.0
     best_gs = 0.0
     best_gt = 0.0
-    best_i = 0.0
-    best_auc_complete = 0.0
-    best_gs_complete = 0.0
-    best_gt_complete = 0.0
-    best_i_complete = 0.0
-
-
-
-    # for g_s in xrange(-12, 0, 2):
-        # for g_t in xrange(-12, 0, 2):
-    for g_s in xrange(-12, -10, 2):
-        for g_t in xrange(-12, -10, 2):
+    best_w = 0.0
+    best_p = 0.0
+    
+    if kernel_type == 'cosine' and len(gList) != 1:
+        raise Warning('For cosine kernel, no need to tune gamma!')
+ 
+    for g_s in gList:
+        for g_t in gList:
             dc.source_gamma = 2.0**g_s
             dc.target_gamma = 2.0**g_t
             y, I, K, offset = dc.get_TL_Kernel()
-            K_comp = DataClass.complete_TL_Kernel(K, offset)
+            if complete_flag == 1:
+                K = DataClass.complete_TL_Kernel(K, offset)
 
 
-            for i in xrange(-12, 10, 2):
-                w_2 = 2.0**i
+            for w in wList:
+                w_2 = 2.0**w
                 auc, ap, rl = solve_and_eval(y, I, K, offset, w_2)
-                print('TL:          log_2gs %3d log_2gt %3d log_2w %3d sparsity 000 auc %6f ap %6f rl %6f' % (g_s, g_t, i, auc, ap, rl))
+                print('log_2gs %3d log_2gt %3d log_2w %3d log_2p  -1 auc %6f ap %6f rl %6f' % (g_s, g_t, w, auc, ap, rl))
                 if auc > best_auc:
                     best_auc = auc
                     best_gs = g_s
                     best_gt = g_t
-                    best_i = i
+                    best_w = w
 
-                auc, ap, rl = solve_and_eval(y, I, K_comp, offset, w_2)
-                print('TL_Complete: log_2gs %3d log_2gt %3d log_2w %3d sparsity 000 auc %6f ap %6f rl %6f' % (g_s, g_t, i, auc, ap, rl))
-                if ap > best_ap_complete:
-                    best_auc_complete = auc
-                    best_gs_complete = g_s
-                    best_gt_complete = g_t
-                    best_i_complete = i
-
-                for j in [10, 20, 40, 80, 160, 320, 500]:
-                    K_sp = DataClass.sym_sparsify_K(K, j)
+                for p in pList:
+                    _p = 2**p
+                    K_sp = DataClass.sym_sparsify_K(K, _p)
                     auc, ap, rl = solve_and_eval(y, I, K_sp, offset, w_2)
-                    print('TL:          log_2g %3d log_2w %3d sparsity %3d auc %6f ap %6f rl %6f' \
-                            % (g, i, j, auc, ap, rl))
+                    print('log_2gs %3d log_2gt %3d log_2w %3d log_2p %3d auc %6f ap %6f rl %6f' \
+                            % (g_s, g_t, w, p, auc, ap, rl))
                     if auc > best_auc:
                         best_auc = auc
-                        best_g = g
-                        best_i = i
-                        best_j = j
+                        best_gs = g_s
+                        best_gt = g_t
+                        best_w = w
+                        best_p = p
 
-                    K_sp = DataClass.sym_sparsify_K(K_comp, j)
-                    print('TL_Complete: log_2gs %3d log_2gt %3d log_2w %3d sparsity %3d auc %6f ap %6f rl %6f' % (g_s, g_t, i, j, auc, ap, rl))
-                    if ap > best_ap_complete:
-                        best_auc_complete = auc
-                        best_gs_complete = g_s
-                        best_gt_complete = g_t
-                        best_i_complete = i
+    print('best parameters: log_2gs log_2gt %3d log_2w %3d log_2p %3d auc %6f' \
+            % (best_gs, best_gt, best_w, best_p, best_auc))
 
 
-    print('best parameters: log_2gs log_2gt %3d log_2w %3d auc %6f' \
-            % (best_gs, best_gt, best_i, best_auc))
-    print('best parameters: log_2gs log_2gt %3d log_2w %3d auc_complete %6f' \
-            % (best_gs_complete, best_gt_complete, best_i, best_auc_complete))
 
+def run_testset(kernel_type='cosine', log_2gs=-12, log_2gt=-12, log_2w=-2, log_2p=-1, complete_flag=1):
+    dc = DataClass(valid_flag=False)
+    dc.kernel_type = kernel_type
+    dc.source_gamma = 2**log_2gs
+    dc.target_gamma = 2**log_2gt
+    y, I, K, offset = dc.get_TL_Kernel()
+    
+    w_2 = 2**log_2w
+    p = 2**log_2p
+    
+    if complete_flag == 1:
+        K = DataClass.complete_TL_Kernel(K, offset)
+
+    # log_2p == -1 means that using full kernel w/o sparsify
+    if log_2p != -1:
+        K = DataClass.sym_sparsify_K(K, p)
+    
+   
+    auc, ap, rl = solve_and_eval(y, I, K, offset, w_2)
+    print('tst test: auc %6f ap %6f rl %6f' %(auc, ap, rl))
+
+
+if __name__ == '__main__':
+    #kernel_type = 'rbf'
+    kernel_type = 'cosine'
+    complete_flag = 0
+    if kernel_type == 'rbf':
+        gList = np.arange(-12, 1, 2)
+    elif kernel_type == 'cosine':
+        gList = np.arange(-12, -10, 2)
+    else:
+        raise ValueError('unknown kernel type')
+    
+    wList = np.arange(-12, 10, 2)
+    pList = np.arange(4, 10, 1)
+    #grid_search(gList, wList, pList, kernel_type, complete_flag)
+    run_testset(kernel_type='cosine', log_2w=-2, log_2p=-1, complete_flag=1)
