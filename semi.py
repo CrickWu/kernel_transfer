@@ -49,52 +49,72 @@ def solve_and_eval(y, I, K, offset, w_2):
     auc, ap, rl = evalulate(y_true, y_prob)
     return auc, ap, rl
 
-if __name__ == '__main__':
 
+# grid search hyperparameter on valid set
+# gList: gamma for rbf kernel.
+# wList: weight for Manifold regularization term
+# pList: sparsity for kernel (p-nearest neighbor)
+# kernel_type: rbf or cosine
+def grid_search(gList, wList, pList, kernel_type):
     dc = DataClass()
+    dc.kernel_type = kernel_type
     y, I, K, offset = dc.get_SSL_Kernel()
     start_offset = offset[0] # for calculating `ap`
 
     n = len(y)
-    # w_2 = 100.0 / n
-
     f = np.zeros(n)
     best_auc = 0.0
     best_g = 0.0
-    best_i = 0.0
-    best_j = 0.0
+    best_w = 0.0
+    best_p = 0.0
 
-
-    # for g in xrange(-12, 0, 2):
-    for g in xrange(-12, -10, 2):
+    if kernel_type == 'cosine' and len(gList) != 1:
+        raise Warning('For cosine kernel, no need to tune gamma!')
+    
+    
+    for g in gList:
         dc.target_gamma = 2**g
         y, I, K, offset = dc.get_SSL_Kernel()
 
-        for i in xrange(-12, 10, 2):
+        for w in wList:
             # weighting coefficient for the second term
-            w_2 = 2.0**i
+            w_2 = 2.0**w
             auc, ap, rl = solve_and_eval(y, I, K, offset, w_2)
-            print('log_2g %3d log_2w %3d sparsity 000 auc %6f ap %6f rl %6f' % (g, i, auc, ap, rl))
+            print('log_2g %3d log_2w %3d log_2p  -1 auc %6f ap %6f rl %6f' % (g, w, auc, ap, rl))
             if auc > best_auc:
                 best_auc = auc
                 best_g = g
-                best_i = i
-                best_j = 0
+                best_w = w
+                best_p = -1
 
 
-            for j in [10, 20, 40, 80, 160, 320, 500]:
-                K_sp = DataClass.sym_sparsify_K(K, j)
+            for p in pList:
+                _p = 2**p
+                K_sp = DataClass.sym_sparsify_K(K, _p)
                 auc, ap, rl = solve_and_eval(y, I, K_sp, offset, w_2)
-                print('log_2g %3d log_2w %3d sparsity %3d auc %6f ap %6f rl %6f' \
-                        % (g, i, j, auc, ap, rl))
+                print('log_2g %3d log_2w %3d log_2p %3d auc %6f ap %6f rl %6f' \
+                        % (g, w, p, auc, ap, rl))
                 if auc > best_auc:
                     best_auc = auc
                     best_g = g
-                    best_i = i
-                    best_j = j
+                    best_w = w
+                    best_p = p
 
+    print('best parameters: log_2g %3d log_2w %3d log_2p %3d auc %6f' \
+            % (best_g, best_w, best_p, best_auc))
 
-    print('best parameters: log_2g %3d log_2w %3d sparsity %3d auc %6f' \
-            % (best_g, best_i, best_j, best_auc))
-
+   
+if __name__ == '__main__':
+    #kernel_type = 'cosine'
+    kernel_type = 'rbf'
+    if kernel_type == 'rbf':
+        gList = np.arange(-12, 1, 2)
+    elif kernel_type == 'cosine':
+        gList = np.arange(-12, -10, 2)
+    else:
+        raise ValueError('unknown kernel type')
+    
+    wList = np.arange(-12, 10, 2)
+    pList = np.arange(4, 10, 1)
+    grid_search(gList, wList, pList, kernel_type)
 
