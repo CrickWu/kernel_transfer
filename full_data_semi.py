@@ -15,6 +15,8 @@ from sklearn.metrics import label_ranking_average_precision_score
 from sklearn.metrics import label_ranking_loss
 from dataclass import DataClass
 
+import cvxopt
+from cvxopt import matrix
 np.random.seed(123)
 
 
@@ -27,13 +29,24 @@ def evalulate(y_true, y_prob):
 
 def solve_and_eval(y, I, K, offset, w_2):
     # closed form
+    n = y.shape[0]
     D = np.diag( K.sum(1) )
     lap = D - K
 
-    A = lap * w_2 + np.diag( I )
-    b = I * y
-    # solve equation Af = b for exact solution of `f`
-    f = np.linalg.lstsq(A,b)[0]
+    P = lap * w_2 + np.diag( I )
+    q = -I * y
+    G = -np.diag(np.ones(n))
+    h = np.zeros(n)
+    #f = np.linalg.lstsq(P,-q)[0]
+    # using cvxopt quadratic programming: 
+    #    min_x  1/2 xTPx + qTx
+    #    s.t.   Gx <= h
+    #           Ax = b
+    # reference: https://github.com/cvxopt/cvxopt
+    #            http://cvxopt.org/examples/
+    cvxopt.solvers.options['show_progress'] = False
+    sol = cvxopt.solvers.qp(matrix(P), matrix(q))#, matrix(G), matrix(h))
+    f = np.array(sol['x'])[:,0]
 
     # for calculating ap
     start_offset = offset[3]
@@ -67,7 +80,7 @@ def grid_search(gList, wList, pList, kernel_type, complete_flag=0):
     best_gs = 0.0
     best_gt = 0.0
     best_w = 0.0
-    best_p = 0.0
+    best_p = -1
     
     if kernel_type == 'cosine' and len(gList) != 1:
         raise Warning('For cosine kernel, no need to tune gamma!')
@@ -104,13 +117,13 @@ def grid_search(gList, wList, pList, kernel_type, complete_flag=0):
                         best_w = w
                         best_p = p
 
-    print('best parameters: log_2gs log_2gt %3d log_2w %3d log_2p %3d auc %6f' \
+    print('best parameters: log_2gs %3d log_2gt %3d log_2w %3d log_2p %3d auc %6f' \
             % (best_gs, best_gt, best_w, best_p, best_auc))
 
 
 
 def run_testset(kernel_type='cosine', log_2gs=-12, log_2gt=-12, log_2w=-2, log_2p=-1, complete_flag=1):
-    dc = DataClass(valid_flag=False)
+    dc = DataClass(valid_flag=True)
     dc.kernel_type = kernel_type
     dc.source_gamma = 2**log_2gs
     dc.target_gamma = 2**log_2gt
@@ -132,8 +145,8 @@ def run_testset(kernel_type='cosine', log_2gs=-12, log_2gt=-12, log_2w=-2, log_2
 
 
 if __name__ == '__main__':
-    #kernel_type = 'rbf'
-    kernel_type = 'cosine'
+    kernel_type = 'rbf'
+    #kernel_type = 'cosine'
     complete_flag = 0
     if kernel_type == 'rbf':
         gList = np.arange(-12, 1, 2)
@@ -144,5 +157,5 @@ if __name__ == '__main__':
     
     wList = np.arange(-12, 10, 2)
     pList = np.arange(4, 10, 1)
-    #grid_search(gList, wList, pList, kernel_type, complete_flag)
-    run_testset(kernel_type='cosine', log_2w=-2, log_2p=-1, complete_flag=1)
+    grid_search(gList, wList, pList, kernel_type, complete_flag)
+    #run_testset(kernel_type='cosine', log_2w=-2, log_2p=-1, complete_flag=1)

@@ -14,6 +14,8 @@ from sklearn.metrics import label_ranking_average_precision_score
 from sklearn.metrics import label_ranking_loss
 from dataclass import DataClass
 
+import cvxopt
+from cvxopt import matrix
 np.random.seed(123)
 
 
@@ -27,13 +29,24 @@ def evalulate(y_true, y_prob):
 
 def solve_and_eval(y, I, K, offset, w_2):
     # closed form
+    n = y.shape[0]
     D = np.diag( K.sum(1) )
     lap = D - K
 
-    A = lap * w_2 + np.diag( I )
-    b = I * y
-    # solve equation Af = b for exact solution of `f`
-    f = np.linalg.lstsq(A,b)[0]
+    P = lap * w_2 + np.diag( I )
+    q = -I * y
+    G = -np.diag(np.ones(n))
+    h = np.zeros(n)
+    #f = np.linalg.lstsq(P,-q)[0]
+    # using cvxopt quadratic programming: 
+    #    min_x  1/2 xTPx + qTx
+    #    s.t.   Gx <= h
+    #           Ax = b
+    # reference: https://github.com/cvxopt/cvxopt
+    #            http://cvxopt.org/examples/
+    cvxopt.solvers.options['show_progress'] = False
+    sol = cvxopt.solvers.qp(matrix(P), matrix(q), matrix(G), matrix(h))
+    f = np.array(sol['x'])[:,0]
 
     # for calculating ap
     start_offset = offset[0]
@@ -119,8 +132,8 @@ def run_testset(kernel_type='cosine', log_2g=-12, log_2w=-12, log_2p=6):
 
 
 if __name__ == '__main__':
-    #kernel_type = 'cosine'
-    kernel_type = 'rbf'
+    kernel_type = 'cosine'
+    #kernel_type = 'rbf'
     if kernel_type == 'rbf':
         gList = np.arange(-12, 1, 2)
     elif kernel_type == 'cosine':
@@ -130,6 +143,6 @@ if __name__ == '__main__':
     
     wList = np.arange(-12, 10, 2)
     pList = np.arange(4, 10, 1)
-    #grid_search(gList, wList, pList, kernel_type)
+    grid_search(gList, wList, pList, kernel_type)
     #run_testset(kernel_type='cosine', log_2g=-12, log_2w=-12, log_2p=6)
-    run_testset(kernel_type='rbf', log_2g=-6, log_2w=8, log_2p=5)
+    #run_testset(kernel_type='rbf', log_2g=-6, log_2w=8, log_2p=5)
