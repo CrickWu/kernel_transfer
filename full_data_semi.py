@@ -45,7 +45,7 @@ def solve_and_eval(y, I, K, offset, w_2):
     # reference: https://github.com/cvxopt/cvxopt
     #            http://cvxopt.org/examples/
     cvxopt.solvers.options['show_progress'] = False
-    sol = cvxopt.solvers.qp(matrix(P), matrix(q))#, matrix(G), matrix(h))
+    sol = cvxopt.solvers.qp(matrix(P), matrix(q)), matrix(G), matrix(h))
     f = np.array(sol['x'])[:,0]
 
     # for calculating ap
@@ -149,13 +149,13 @@ if __name__ == '__main__':
     #kernel_type = 'cosine'
     complete_flag = 0
     if kernel_type == 'rbf':
-        gList = np.arange(-12, 1, 2)
+        gList = np.arange(-20, 0, 2)
     elif kernel_type == 'cosine':
         gList = np.arange(-12, -10, 2)
     else:
         raise ValueError('unknown kernel type')
     
-    wList = np.arange(-12, 10, 2)
+    wList = np.arange(-12, 8, 2)
     pList = np.arange(4, 10, 1)
     grid_search(gList, wList, pList, kernel_type, complete_flag)
     #run_testset(kernel_type='cosine', log_2w=-2, log_2p=-1, complete_flag=1)
