@@ -38,14 +38,14 @@ def solve_and_eval(y, I, K, offset, w_2):
     G = -np.diag(np.ones(n))
     h = np.zeros(n)
     #f = np.linalg.lstsq(P,-q)[0]
-    # using cvxopt quadratic programming: 
+    # using cvxopt quadratic programming:
     #    min_x  1/2 xTPx + qTx
     #    s.t.   Gx <= h
     #           Ax = b
     # reference: https://github.com/cvxopt/cvxopt
     #            http://cvxopt.org/examples/
     cvxopt.solvers.options['show_progress'] = False
-    sol = cvxopt.solvers.qp(matrix(P), matrix(q)), matrix(G), matrix(h))
+    sol = cvxopt.solvers.qp(matrix(P), matrix(q), matrix(G), matrix(h))
     f = np.array(sol['x'])[:,0]
 
     # for calculating ap
@@ -67,11 +67,11 @@ def solve_and_eval(y, I, K, offset, w_2):
 # gList: gamma for rbf kernel
 # wList: weight for Manifold regularization term
 # pList: sparsity for kernel (p-nearest neighbor)
-# kernel_type: rbf or cosine
-# complete_flag: 1 or 0 (default 0), whether complete K_st and K_ts block of kernel or not 
-def grid_search(gList, wList, pList, kernel_type, complete_flag=0):
-    dc = DataClass()
-    dc.kernel_type = kernel_type
+# kernel_type: 'rbf' or 'cosine'
+# source_data_type: 'full' or 'normal'
+# complete_flag: 1 or 0 (default 0), whether complete K_st and K_ts block of kernel or not
+def grid_search(gList, wList, pList, kernel_type, source_data_type, complete_flag=0):
+    dc = DataClass(kernel_type=kernel_type, source_data_type=source_data_type)
     y, I, K, offset = dc.get_TL_Kernel()
 
     n = len(y)
@@ -81,10 +81,10 @@ def grid_search(gList, wList, pList, kernel_type, complete_flag=0):
     best_gt = 0.0
     best_w = 0.0
     best_p = -1
-    
+
     if kernel_type == 'cosine' and len(gList) != 1:
         raise Warning('For cosine kernel, no need to tune gamma!')
- 
+
     for g_s in gList:
         for g_t in gList:
             dc.source_gamma = 2.0**g_s
@@ -128,25 +128,25 @@ def run_testset(kernel_type='cosine', log_2gs=-12, log_2gt=-12, log_2w=-2, log_2
     dc.source_gamma = 2**log_2gs
     dc.target_gamma = 2**log_2gt
     y, I, K, offset = dc.get_TL_Kernel()
-    
+
     w_2 = 2**log_2w
     p = 2**log_2p
-    
+
     if complete_flag == 1:
         K = DataClass.complete_TL_Kernel(K, offset)
 
     # log_2p == -1 means that using full kernel w/o sparsify
     if log_2p != -1:
         K = DataClass.sym_sparsify_K(K, p)
-    
-   
+
+
     auc, ap, rl = solve_and_eval(y, I, K, offset, w_2)
     print('tst test: auc %6f ap %6f rl %6f' %(auc, ap, rl))
 
-
 if __name__ == '__main__':
-    kernel_type = 'rbf'
-    #kernel_type = 'cosine'
+    source_data_type = 'full'
+    # kernel_type = 'rbf'
+    kernel_type = 'cosine'
     complete_flag = 0
     if kernel_type == 'rbf':
         gList = np.arange(-20, 0, 2)
@@ -154,8 +154,8 @@ if __name__ == '__main__':
         gList = np.arange(-12, -10, 2)
     else:
         raise ValueError('unknown kernel type')
-    
+
     wList = np.arange(-12, 8, 2)
     pList = np.arange(4, 10, 1)
-    grid_search(gList, wList, pList, kernel_type, complete_flag)
+    grid_search(gList, wList, pList, kernel_type, source_data_type, complete_flag)
     #run_testset(kernel_type='cosine', log_2w=-2, log_2p=-1, complete_flag=1)

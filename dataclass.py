@@ -3,9 +3,22 @@
 # This is the class wrapper around dataloader.
 import numpy as np
 import scipy.sparse as sp
+import os
 import configure_path
-from sklearn.datasets import load_svmlight_file
+import sklearn.datasets as sd
 from sklearn.metrics.pairwise import rbf_kernel, cosine_similarity
+
+# wrapper for load_svmlight_file in dealing with empty files / no-existing files
+def load_svmlight_file(f, n_features=None, dtype=np.float64, multilabel=False, zero_based='auto', query_id=False):
+    if not os.path.exists(f) or (os.stat(f).st_size == 0):
+        assert n_features != None
+        if multilabel:
+            y = [()]
+        else:
+            y = []
+        return sp.csr_matrix((0, n_features)), y
+    else:
+        return sd.load_svmlight_file(f, n_features=n_features, dtype=dtype, multilabel=multilabel, zero_based=zero_based, query_id=query_id)
 
 class DataClass:
     # attributes:
@@ -16,7 +29,10 @@ class DataClass:
     # kernel: source_gamma, target_gamma
     # kernel_type: 'rbf', 'cosine'
     # valid_flag: use .val.libsvm for grid search, or use .tst.libsvm for reporting final results
-    def __init__(self, srcPath=None, tgtPath=None, prlPath=None, valid_flag=True,
+    # source_data_type:
+    #   'full': use src.full.trn.libsvm as the training data in the source domain, leaving test and para data to be empty
+    #   'normal': use both train, test, para data in the source domain
+    def __init__(self, srcPath=None, tgtPath=None, prlPath=None, valid_flag=True, source_data_type='full',
                 source_n_features=100000, target_n_features=200000, kernel_type='cosine',
                 source_gamma=None, target_gamma=None):
         if srcPath == None:
@@ -29,6 +45,7 @@ class DataClass:
         self.target_n_features = target_n_features
         self.kernel_type = kernel_type
         self.valid_flag = valid_flag
+        self.source_data_type = source_data_type
         if source_gamma == None:
             self.source_gamma = 1.0 / np.sqrt(source_n_features)
         if target_gamma == None:
@@ -64,16 +81,33 @@ class DataClass:
     # K: (ns+nt) * (ns+nt), basic kernel, which could also be the i~j indicator
     # offset: [source_train , ... , target_para] offset number
     def get_TL_Kernel(self):
-        source_train = self.srcPath + '.trn.libsvm'
-        source_test = self.srcPath + '.val.libsvm' # val is for tuning hyperparameters, in final should report on tst
-        source_para = self.prlPath + 'prlSrc.libsvm'
+        if self.source_data_type == 'normal':
+            source_train = self.srcPath + '.trn.libsvm'
+            source_test = self.srcPath + '.val.libsvm' # val is for tuning hyperparameters, in final should report on tst
+            source_para = self.prlPath + 'prlSrc.libsvm'
+        elif self.source_data_type == 'full':
+            # if srcPath ends with numbers, trail it
+            fields = self.srcPath.split('.')
+            if fields[-1].isdigit():
+                srcPath = '.'.join(fields[:-1])
+            else:
+                srcPath = self.srcPath
+            source_train = srcPath + '.trn.libsvm'
+            source_test = srcPath + '.val.libsvm' # val is for tuning hyperparameters, in final should report on tst
+            source_para = self.prlPath + 'prlSrc.libsvm'
+        else:
+            raise ValueError('Unknown source domain data option.')
 
         target_train = self.tgtPath + '.trn.libsvm'
         target_test = self.tgtPath + '.val.libsvm'
         target_para = self.prlPath + 'prlTgt.libsvm'
         if self.valid_flag == False:
             target_test = self.tgtPath + '.tst.libsvm'
+        return self._get_TL_Kernel(source_train, source_test, source_para,
+                                   target_train, target_test, target_para)
 
+    def _get_TL_Kernel(self, source_train, source_test, source_para,
+                             target_train, target_test, target_para):
         # source_domain, target_domain dimension should be fixed
 
         source_train_X, source_train_y = load_svmlight_file(source_train, n_features=self.source_n_features)
@@ -144,6 +178,7 @@ class DataClass:
         target_train_X, target_train_y = load_svmlight_file(target_train, n_features=self.target_n_features)
         target_test_X, target_test_y = load_svmlight_file(target_test, n_features=self.target_n_features)
 
+        # print(type(target_train_X), type(target_train_y), type(target_test_X))
         len_X = [target_train_X.shape[0] , target_test_X.shape[0]]
         offset = np.cumsum(len_X)
 
