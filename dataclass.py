@@ -32,7 +32,9 @@ class DataClass:
     # source_data_type:
     #   'full': use src.full.trn.libsvm as the training data in the source domain, leaving test and para data to be empty
     #   'normal': use both train, test, para data in the source domain
-    def __init__(self, srcPath=None, tgtPath=None, prlPath=None, valid_flag=True, source_data_type='full',
+    #   'parallel': use only parallel in the source domain
+    # zero_diag_flag: (True) zero-out the diagonal, (False) keep the diagonal to be 1s
+    def __init__(self, srcPath=None, tgtPath=None, prlPath=None, valid_flag=True, zero_diag_flag=False, source_data_type='full',
                 source_n_features=100000, target_n_features=200000, kernel_type='cosine',
                 source_gamma=None, target_gamma=None):
         if srcPath == None:
@@ -45,6 +47,7 @@ class DataClass:
         self.target_n_features = target_n_features
         self.kernel_type = kernel_type
         self.valid_flag = valid_flag
+        self.zero_diag_flag = zero_diag_flag
         self.source_data_type = source_data_type
         if source_gamma == None:
             self.source_gamma = 1.0 / np.sqrt(source_n_features)
@@ -84,7 +87,6 @@ class DataClass:
         if self.source_data_type == 'normal':
             source_train = self.srcPath + '.trn.libsvm'
             source_test = self.srcPath + '.val.libsvm' # val is for tuning hyperparameters, in final should report on tst
-            source_para = self.prlPath + 'prlSrc.libsvm'
         elif self.source_data_type == 'full':
             # if srcPath ends with numbers, trail it
             fields = self.srcPath.split('.')
@@ -92,11 +94,14 @@ class DataClass:
                 srcPath = '.'.join(fields[:-1])
             else:
                 srcPath = self.srcPath
-            source_train = srcPath + '.trn.libsvm'
-            source_test = srcPath + '.val.libsvm' # val is for tuning hyperparameters, in final should report on tst
-            source_para = self.prlPath + 'prlSrc.libsvm'
+            source_train = srcPath + '.full.trn.libsvm'
+            source_test = srcPath + '.full.val.libsvm' # val is for tuning hyperparameters, in final should report on tst
+        elif self.source_data_type == 'parallel':
+            source_train = '/non/existent/file'
+            source_test = '/non/existent/file'
         else:
             raise ValueError('Unknown source domain data option.')
+        source_para = self.prlPath + 'prlSrc.libsvm'
 
         target_train = self.tgtPath + '.trn.libsvm'
         target_test = self.tgtPath + '.val.libsvm'
@@ -136,6 +141,7 @@ class DataClass:
         len_X = [source_train_X.shape[0] , source_test_X.shape[0] , source_para_X.shape[0]
                 , target_train_X.shape[0] , target_test_X.shape[0] , target_para_X.shape[0]]
         offset = np.cumsum(len_X)
+
         # print 'offset\t', offset
 
         # K initialize
@@ -147,6 +153,8 @@ class DataClass:
         # parallel data
         K[offset[1]:offset[2],offset[4]:offset[5]] = np.ones([len_X[2], len_X[2]], dtype=np.float)
         K[offset[4]:offset[5],offset[1]:offset[2]] = np.ones([len_X[2], len_X[2]], dtype=np.float)
+        if self.zero_diag_flag:
+            np.fill_diagonal(K, 0.0)
 
         # observation Indicator
         I = np.zeros(n, dtype=np.float)
@@ -197,6 +205,8 @@ class DataClass:
         I[0:offset[0]] = np.ones(len_X[0], dtype=np.float)
 
         K = target_ker
+        if self.zero_diag_flag:
+            np.fill_diagonal(K, 0.0)
         return y, I, K, offset
 
     @staticmethod
@@ -210,6 +220,10 @@ class DataClass:
         K[offset[4]:offset[5], 0:offset[1]] = K[offset[1]: offset[2], 0:offset[1]]
         K[offset[2]:offset[4], offset[1]:offset[2]] = K[offset[2]: offset[4], offset[4]:offset[5]]
         K[offset[4]:offset[5], offset[1]:offset[2]] = (K[offset[1]: offset[2], offset[1]:offset[2]] +  K[offset[4]: offset[5], offset[4]:offset[5]]) / 2
+        # zero_based should impose 1 to parallel diagonal elements
+        xcoos = xrange(offset[4], offset[5])
+        ycoos = xrange(offset[1], offset[2])
+        K[xcoos, ycoos] = 1.0
 
         K[0:offset[2], offset[2]:offset[5]] = K[offset[2]:offset[5], 0:offset[2]].transpose()
         return K

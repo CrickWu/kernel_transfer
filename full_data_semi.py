@@ -70,8 +70,9 @@ def solve_and_eval(y, I, K, offset, w_2):
 # kernel_type: 'rbf' or 'cosine'
 # source_data_type: 'full' or 'normal'
 # complete_flag: 1 or 0 (default 0), whether complete K_st and K_ts block of kernel or not
-def grid_search(gList, wList, pList, kernel_type, source_data_type, complete_flag=0):
-    dc = DataClass(kernel_type=kernel_type, source_data_type=source_data_type)
+# zero_diag_flag: whether zero out the diagonal or not
+def grid_search(gList, wList, pList, kernel_type, source_data_type, complete_flag=0, zero_diag_flag=True):
+    dc = DataClass(kernel_type=kernel_type, source_data_type=source_data_type, zero_diag_flag=zero_diag_flag)
     y, I, K, offset = dc.get_TL_Kernel()
 
     n = len(y)
@@ -81,6 +82,9 @@ def grid_search(gList, wList, pList, kernel_type, source_data_type, complete_fla
     best_gt = 0.0
     best_w = 0.0
     best_p = -1
+    # pList padding
+    if pList[0] != -1:
+        pList = np.insert(pList, 0, -1)
 
     if kernel_type == 'cosine' and len(gList) != 1:
         raise Warning('For cosine kernel, no need to tune gamma!')
@@ -96,17 +100,13 @@ def grid_search(gList, wList, pList, kernel_type, source_data_type, complete_fla
 
             for w in wList:
                 w_2 = 2.0**w
-                auc, ap, rl = solve_and_eval(y, I, K, offset, w_2)
-                print('log_2gs %3d log_2gt %3d log_2w %3d log_2p  -1 auc %6f ap %6f rl %6f' % (g_s, g_t, w, auc, ap, rl))
-                if auc > best_auc:
-                    best_auc = auc
-                    best_gs = g_s
-                    best_gt = g_t
-                    best_w = w
 
                 for p in pList:
                     _p = 2**p
-                    K_sp = DataClass.sym_sparsify_K(K, _p)
+                    if p == -1:
+                        K_sp = K
+                    else:
+                        K_sp = DataClass.sym_sparsify_K(K, _p)
                     auc, ap, rl = solve_and_eval(y, I, K_sp, offset, w_2)
                     print('log_2gs %3d log_2gt %3d log_2w %3d log_2p %3d auc %6f ap %6f rl %6f' \
                             % (g_s, g_t, w, p, auc, ap, rl))
@@ -122,11 +122,12 @@ def grid_search(gList, wList, pList, kernel_type, source_data_type, complete_fla
 
 
 
-def run_testset(kernel_type='cosine', log_2gs=-12, log_2gt=-12, log_2w=-2, log_2p=-1, complete_flag=1):
-    dc = DataClass(valid_flag=True)
+def run_testset(kernel_type='cosine', log_2gs=-12, log_2gt=-12, log_2w=-2, log_2p=-1, complete_flag=1, zero_diag_flag=True):
+    dc = DataClass(valid_flag=False)
     dc.kernel_type = kernel_type
     dc.source_gamma = 2**log_2gs
     dc.target_gamma = 2**log_2gt
+    dc.zero_diag_flag = zero_diag_flag
     y, I, K, offset = dc.get_TL_Kernel()
 
     w_2 = 2**log_2w
@@ -148,6 +149,8 @@ if __name__ == '__main__':
     # kernel_type = 'rbf'
     kernel_type = 'cosine'
     complete_flag = 0
+    zero_diag_flag = True
+
     if kernel_type == 'rbf':
         gList = np.arange(-20, 0, 2)
     elif kernel_type == 'cosine':
@@ -155,7 +158,16 @@ if __name__ == '__main__':
     else:
         raise ValueError('unknown kernel type')
 
-    wList = np.arange(-12, 8, 2)
-    pList = np.arange(4, 10, 1)
-    grid_search(gList, wList, pList, kernel_type, source_data_type, complete_flag)
-    #run_testset(kernel_type='cosine', log_2w=-2, log_2p=-1, complete_flag=1)
+    wList = np.arange(-12, 2, 2)
+    # wList = np.arange(-12, 8, 2)
+    # wList = np.arange(-6, -4, 2)
+    # pList = np.arange(4, 10, 1)
+    if complete_flag:
+        pList = np.arange(2, 7, 1)
+    else:
+        pList = np.arange(5, 10, 1)
+    # grid_search(gList, wList, pList, kernel_type, source_data_type, complete_flag, zero_diag_flag)
+    run_testset(kernel_type='cosine', log_2w=-12, log_2p=-1, complete_flag=0, zero_diag_flag=True)  # no_comp zero
+    # run_testset(kernel_type='cosine', log_2w=-6, log_2p=3, complete_flag=True, zero_diag_flag=True) # comp    zero
+    # run_testset(kernel_type='cosine', log_2w=-12, log_2p=-1, complete_flag=False, zero_diag_flag=False) # no_comp no_zero
+    # run_testset(kernel_type='cosine', log_2w=-8, log_2p=4, complete_flag=True, zero_diag_flag=False)   # comp no_zero

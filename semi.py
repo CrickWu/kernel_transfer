@@ -38,7 +38,7 @@ def solve_and_eval(y, I, K, offset, w_2):
     G = -np.diag(np.ones(n))
     h = np.zeros(n)
     #f = np.linalg.lstsq(P,-q)[0]
-    # using cvxopt quadratic programming: 
+    # using cvxopt quadratic programming:
     #    min_x  1/2 xTPx + qTx
     #    s.t.   Gx <= h
     #           Ax = b
@@ -68,9 +68,11 @@ def solve_and_eval(y, I, K, offset, w_2):
 # wList: weight for Manifold regularization term
 # pList: sparsity for kernel (p-nearest neighbor)
 # kernel_type: rbf or cosine
-def grid_search(gList, wList, pList, kernel_type):
+# zero_diag_flag: whether zero out the diagonal or not
+def grid_search(gList, wList, pList, kernel_type, zero_diag_flag=True):
     dc = DataClass()
     dc.kernel_type = kernel_type
+    dc.zero_diag_flag = zero_diag_flag
     y, I, K, offset = dc.get_SSL_Kernel()
 
     best_auc = 0.0
@@ -80,8 +82,8 @@ def grid_search(gList, wList, pList, kernel_type):
 
     if kernel_type == 'cosine' and len(gList) != 1:
         raise Warning('For cosine kernel, no need to tune gamma!')
-    
-    
+
+
     for g in gList:
         dc.target_gamma = 2**g
         y, I, K, offset = dc.get_SSL_Kernel()
@@ -114,19 +116,20 @@ def grid_search(gList, wList, pList, kernel_type):
             % (best_g, best_w, best_p, best_auc))
 
 
-def run_testset(kernel_type='cosine', log_2g=-12, log_2w=-12, log_2p=6):
+def run_testset(kernel_type='cosine', log_2g=-12, log_2w=-12, log_2p=6, zero_diag_flag=True):
     dc = DataClass(valid_flag=False)
     dc.kernel_type = kernel_type
     dc.target_gamma = 2**log_2g
+    dc.zero_diag_flag = True
     y, I, K, offset = dc.get_SSL_Kernel()
-    
+
     w_2 = 2**log_2w
     p = 2**log_2p
-    
+
     # log_2p == -1 means that using full kernel w/o sparsify
     if log_2p != -1:
         K = DataClass.sym_sparsify_K(K, p)
-    
+
     auc, ap, rl = solve_and_eval(y, I, K, offset, w_2)
     print('tst test: auc %6f ap %6f rl %6f' %(auc, ap, rl))
 
@@ -140,9 +143,9 @@ if __name__ == '__main__':
         gList = np.arange(-12, -10, 2)
     else:
         raise ValueError('unknown kernel type')
-    
+
     wList = np.arange(-12, 10, 2)
     pList = np.arange(4, 10, 1)
-    grid_search(gList, wList, pList, kernel_type)
-    #run_testset(kernel_type='cosine', log_2g=-12, log_2w=-12, log_2p=6)
+    # grid_search(gList, wList, pList, kernel_type, zero_diag_flag=True)
+    run_testset(kernel_type='cosine', log_2g=-12, log_2w=-8, log_2p=6, zero_diag_flag=True)
     #run_testset(kernel_type='rbf', log_2g=-6, log_2w=8, log_2p=5)
