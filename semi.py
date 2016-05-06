@@ -120,7 +120,7 @@ def run_testset(kernel_type='cosine', log_2g=-12, log_2w=-12, log_2p=6, zero_dia
     dc = DataClass(valid_flag=False)
     dc.kernel_type = kernel_type
     dc.target_gamma = 2**log_2g
-    dc.zero_diag_flag = True
+    dc.zero_diag_flag = zero_diag_flag
     y, I, K, offset = dc.get_SSL_Kernel()
 
     w_2 = 2**log_2w
@@ -147,5 +147,5 @@ if __name__ == '__main__':
     wList = np.arange(-12, 10, 2)
     pList = np.arange(4, 10, 1)
     # grid_search(gList, wList, pList, kernel_type, zero_diag_flag=True)
-    run_testset(kernel_type='cosine', log_2g=-12, log_2w=-8, log_2p=6, zero_diag_flag=True)
-    #run_testset(kernel_type='rbf', log_2g=-6, log_2w=8, log_2p=5)
+    run_testset(kernel_type='cosine', log_2g=-12, log_2w=-8, log_2p=6, zero_diag_flag=True) # zero_diag
+    run_testset(kernel_type='cosine', log_2g=-12, log_2w=-12, log_2p=6, zero_diag_flag=False) # non_zero_diag
