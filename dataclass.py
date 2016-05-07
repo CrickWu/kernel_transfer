@@ -34,8 +34,11 @@ class DataClass:
     #   'normal': use both train, test, para data in the source domain
     #   'parallel': use only parallel in the source domain
     # zero_diag_flag: (True) zero-out the diagonal, (False) keep the diagonal to be 1s
+    # kernel_normal:
+    #   True: use symmetrically normalized W
+    #   False: directly use W
     def __init__(self, srcPath=None, tgtPath=None, prlPath=None, valid_flag=True, zero_diag_flag=False, source_data_type='full',
-                source_n_features=100000, target_n_features=200000, kernel_type='cosine',
+                source_n_features=100000, target_n_features=200000, kernel_type='cosine', kernel_normal=True,
                 source_gamma=None, target_gamma=None):
         if srcPath == None:
             self.srcPath = configure_path.srcPath
@@ -46,6 +49,7 @@ class DataClass:
         self.source_n_features = source_n_features
         self.target_n_features = target_n_features
         self.kernel_type = kernel_type
+        self.kernel_normal = kernel_normal
         self.valid_flag = valid_flag
         self.zero_diag_flag = zero_diag_flag
         self.source_data_type = source_data_type
@@ -58,6 +62,11 @@ class DataClass:
             return cosine_similarity(data)
         elif self.kernel_type == 'rbf':
             return rbf_kernel(data, gamma=parameters['gamma'])
+
+    @staticmethod
+    def normalize(K):
+        inv_sqrt_row_sum = np.diag( 1.0 / np.sqrt(K.sum(axis=1)) )
+        return inv_sqrt_row_sum.dot(K).dot(inv_sqrt_row_sum)
 
     # keep the `nn` nearest neighbor for each row
     # nn is # nearest neighbor to keep
@@ -108,8 +117,9 @@ class DataClass:
         target_para = self.prlPath + 'prlTgt.libsvm'
         if self.valid_flag == False:
             target_test = self.tgtPath + '.tst.libsvm'
-        return self._get_TL_Kernel(source_train, source_test, source_para,
-                                   target_train, target_test, target_para)
+        K = self._get_TL_Kernel(source_train, source_test, source_para,
+                               target_train, target_test, target_para)
+        return K
 
     def _get_TL_Kernel(self, source_train, source_test, source_para,
                              target_train, target_test, target_para):
@@ -155,6 +165,8 @@ class DataClass:
         K[offset[4]:offset[5],offset[1]:offset[2]] = np.ones([len_X[2], len_X[2]], dtype=np.float)
         if self.zero_diag_flag:
             np.fill_diagonal(K, 0.0)
+        if self.kernel_normal:
+            K = DataClass.normalize(K)
 
         # observation Indicator
         I = np.zeros(n, dtype=np.float)
@@ -207,6 +219,8 @@ class DataClass:
         K = target_ker
         if self.zero_diag_flag:
             np.fill_diagonal(K, 0.0)
+        if self.kernel_normal:
+            K = DataClass.normalize(K)
         return y, I, K, offset
 
     @staticmethod
