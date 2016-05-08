@@ -138,8 +138,11 @@ class DataClass:
         #     source_gamma = 1.0 / np.sqrt(source_train_X.shape[1])
         # if target_gamma == None:
         #     target_gamma = 1.0 / np.sqrt(target_train_X.shape[1])
-
-        source_data = sp.vstack([source_train_X, source_test_X, source_para_X])
+        
+        if source_test_X.shape[0] == 0:
+            source_data = sp.vstack([source_train_X, source_para_X])
+        else:
+            source_data = sp.vstack([source_train_X, source_test_X, source_para_X])
         # source_ker = rbf_kernel(source_data, gamma=self.source_gamma)
         source_ker = self.kernel(source_data, gamma=self.source_gamma)
 
