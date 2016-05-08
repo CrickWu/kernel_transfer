@@ -32,7 +32,7 @@ def evalulate(y_true, y_prob):
 def solve_and_eval(y, I, K, offset, w_2):
     # closed form
     n = y.shape[0]
-    D = np.diag( K.sum(1) )
+    D = np.diag( np.sum(K, axis=1) )
     lap = D - K
 
     P = lap * w_2 + np.diag( I )
@@ -124,8 +124,8 @@ def grid_diffK(kernel_type='cosine', zero_diag_flag=False, kernel_normal=True, b
 
 
 def run_testset(kernel_type='cosine', 
-        zero_diag_flag=False, kernel_normal=True, 
-        log2_b=2**(-14), log2_w=2**(-8), log2_p=2**8):
+        zero_diag_flag=False, kernel_normal=False, 
+        log2_b=-14, log2_w=-8, log2_p=8):
     dc = DataClass(valid_flag=False, kernel_normal=kernel_normal)
     dc.kernel_type = kernel_type
     dc.zero_diag_flag = zero_diag_flag
@@ -151,7 +151,7 @@ def run_testset(kernel_type='cosine',
     K[offset[2]:, :offset[2]] = K_st.T 
     if log2_p != -1:
         K = DataClass.sym_sparsify_K(K, 2**log2_p)
-    auc, ap, rl = solve_and_eval(y, I, offset, K, 2**log2_w)
+    auc, ap, rl = solve_and_eval(y, I, K, offset, 2**log2_w)
     print('test set: auc %6f ap %6f rl %6f' % (auc, ap, rl))
 
 
