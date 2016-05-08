@@ -31,7 +31,6 @@ def evalulate(y_true, y_prob):
 
 def solve_and_eval(y, I, K, offset, w_2):
     # closed form
-    return 1,1,1
     n = y.shape[0]
     D = np.diag( K.sum(1) )
     lap = D - K
@@ -152,7 +151,7 @@ def run_testset(kernel_type='cosine',
     K[offset[2]:, :offset[2]] = K_st.T 
     if log2_p != -1:
         K = DataClass.sym_sparsify_K(K, 2**log2_p)
-    auc, ap, rl = solve_and_eval(y, I, offset, 2**log2_w)
+    auc, ap, rl = solve_and_eval(y, I, offset, K, 2**log2_w)
     print('test set: auc %6f ap %6f rl %6f' % (auc, ap, rl))
 
 
