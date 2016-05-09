@@ -164,8 +164,8 @@ class DataClass:
         K[0:offset[2],0:offset[2]] = source_ker
         K[offset[2]:offset[5],offset[2]:offset[5]] = target_ker
         # parallel data
-        K[offset[1]:offset[2],offset[4]:offset[5]] = np.diag([1.] * len_X[2], dtype=np.float)
-        K[offset[4]:offset[5],offset[1]:offset[2]] = np.diag([1.] * len_X[2], dtype=np.float)
+        K[offset[1]:offset[2],offset[4]:offset[5]] = np.diag([1.] * len_X[2])
+        K[offset[4]:offset[5],offset[1]:offset[2]] = np.diag([1.] * len_X[2])
         if self.zero_diag_flag:
             np.fill_diagonal(K, 0.0)
         if self.kernel_normal:
