@@ -64,6 +64,25 @@ def solve_and_eval(y, I, K, offset, w_2):
     auc, ap, rl = evalulate(y_true, y_prob)
     return auc, ap, rl
 
+def eigen_decompose(K, offset, max_k=128):
+    W_s = K[:offset[2], :offset[2]]
+    W_t = K[offset[2]:, offset[2]:]
+    v_s, Q_s = sp.linalg.eigsh(W_s, k=max_k)
+    v_t, Q_t = sp.linalg.eigsh(W_t, k=max_k)
+    return v_s, Q_s, v_t, Q_t 
+
+def get_K_exp(K_exp, offset, v_s, Q_s, v_t, Q_t, beta, kernel_normal):
+    Y_st = K_exp[:offset[2], offset[2]:]
+    Lambda_s = np.diag(np.exp(beta*v_s))
+    Lambda_t = np.diag(np.exp(beta*v_t))
+    K_ss = Q_s.dot(Lambda_s.dot(Q_s.T)) 
+    K_tt = Q_t.dot(Lambda_t.dot(Q_t.T))
+    K_st = K_ss.dot(Y_st.dot(K_tt))
+    if not kernel_normal:
+        K_st = normalize(K_st)
+    K_exp[:offset[2], offset[2]:] = K_st
+    K_exp[offset[2]:, :offset[2]] = K_st.T 
+    return K_exp
 
 # grid search hyperparameter on valid set
 # bList: beta for exp kernel
@@ -73,19 +92,14 @@ def solve_and_eval(y, I, K, offset, w_2):
 # source_data_type: 'full' or 'normal'
 # kernel_normal: whether to normalized the W or not
 # zero_diag_flag: whether zero out the diagonal or not
-def grid(kernel_type='cosine', zero_diag_flag=True, kernel_normal=True, bList=None, wList=None, pList=None):
+def grid(kernel_type='cosine', zero_diag_flag=True, kernel_normal=False, bList=None, wList=None, pList=None):
     dc = DataClass(valid_flag=True, kernel_normal=kernel_normal)
     dc.kernel_type = kernel_type
     dc.zero_diag_flag = zero_diag_flag
     y, I, K, offset = dc.get_TL_Kernel()
 
     # run eigen decomposition on K
-    W_s = K[:offset[2], :offset[2]]
-    W_t = K[offset[2]:, offset[2]:]
-    max_k = 128
-    v_s, Q_s = sp.linalg.eigsh(W_s, k=max_k)
-    v_t, Q_t = sp.linalg.eigsh(W_t, k=max_k)
-    Y_st = K[:offset[2], offset[2]:]
+    v_s, Q_s, v_t, Q_t = eigen_decompose(K, offset, max_k=128)    
     
     best_b = -1
     best_w = -1
@@ -93,23 +107,14 @@ def grid(kernel_type='cosine', zero_diag_flag=True, kernel_normal=True, bList=No
     best_auc = -1
     for log2_b in bList:
         beta = 2**log2_b
-        Lambda_s = np.diag(np.exp(beta*v_s))
-        Lambda_t = np.diag(np.exp(beta*v_t))
-        K_ss = Q_s.dot(Lambda_s.dot(Q_s.T)) 
-        K_tt = Q_t.dot(Lambda_t.dot(Q_t.T))
-        K_st = K_ss.dot(Y_st.dot(K_tt))
-        if not kernel_normal:
-            K_st = normalize(K_st)
-        K[:offset[2], offset[2]:] = K_st
-        K[offset[2]:, :offset[2]] = K_st.T 
+        K_exp = K.copy()
+        K_exp = get_K_exp(K_exp, offset, v_s, Q_s, v_t, Q_t, beta, kernel_normal)
         for log2_w in wList:
             for log2_p in pList:
                 if log2_p == -1:
-                    K_sp = K
+                    K_sp = K_exp
                 else:
-                    K_sp = DataClass.sym_sparsify_K(K, 2**log2_p)
-                K_sp[K_sp < 0] = 0
-                print log2_p, DataClass.sparse_K_stat(K_sp, offset)
+                    K_sp = DataClass.sym_sparsify_K(K_exp, 2**log2_p)
                 auc, ap, rl = solve_and_eval(y, I, K_sp, offset, 2**log2_w)
                 print('log2_b %3d log2_w %3d log2_p %3d auc %8f ap %6f rl %6f' %(log2_b, log2_w, log2_p, auc, ap, rl))
                 if best_auc < auc:
@@ -120,45 +125,30 @@ def grid(kernel_type='cosine', zero_diag_flag=True, kernel_normal=True, bList=No
             % (best_b, best_w, best_p, best_auc))
 
 
-def run_testset(kernel_type='cosine', 
-        zero_diag_flag=False, kernel_normal=False, 
-        log2_b=-14, log2_w=-8, log2_p=8):
+def run_testset(kernel_type='cosine', zero_diag_flag=True, kernel_normal=False, log2_b=-14, log2_w=-8, log2_p=8):
     dc = DataClass(valid_flag=False, kernel_normal=kernel_normal)
     dc.kernel_type = kernel_type
     dc.zero_diag_flag = zero_diag_flag
     y, I, K, offset = dc.get_TL_Kernel()
-
+    
     # run eigen decomposition on K
-    W_s = K[:offset[2], :offset[2]]
-    W_t = K[offset[2]:, offset[2]:]
-    max_k = 128
-    v_s, Q_s = sp.linalg.eigsh(W_s, k=max_k)
-    v_t, Q_t = sp.linalg.eigsh(W_t, k=max_k)
-    Y_st = K[:offset[2], offset[2]:]
-   
+    v_s, Q_s, v_t, Q_t = eigen_decompose(K, offset, max_k=128)    
+ 
     beta = 2**log2_b
-    Lambda_s = np.diag(np.exp(beta*v_s))
-    Lambda_t = np.diag(np.exp(beta*v_t))
-    K_ss = Q_s.dot(Lambda_s.dot(Q_s.T)) 
-    K_tt = Q_t.dot(Lambda_t.dot(Q_t.T))
-    K_st = K_ss.dot(Y_st.dot(K_tt))
-    if not kernel_normal:
-        K_st = normalize(K_st)
-    K[:offset[2], offset[2]:] = K_st
-    K[offset[2]:, :offset[2]] = K_st.T 
-    if log2_p != -1:
-        K = DataClass.sym_sparsify_K(K, 2**log2_p)
+    K_exp = K.copy()
+    K_exp = get_K_exp(K_exp, offset, v_s, Q_s, v_t, Q_t, beta, kernel_normal)
+    
+    if log2_p == -1:
+        K_sp = K_exp
+    else:
+        K_sp = DataClass.sym_sparsify_K(K_exp, 2**log2_p)
     auc, ap, rl = solve_and_eval(y, I, K, offset, 2**log2_w)
     print('test set: auc %6f ap %6f rl %6f' % (auc, ap, rl))
 
 
 if __name__ == '__main__':
-    source_data_type = 'full'
-    kernel_type = 'cosine'
-    zero_diag_flag = True
-
-    bList = np.arange(-14, -12, 2)
+    bList = np.arange(-20, -8, 2)
     wList = np.arange(-12, -10, 2) 
     pList = np.arange(-1, 11, 2)
-    grid(kernel_type='cosine', zero_diag_flag=False, kernel_normal=True, bList=bList, wList=wList, pList=pList)
+    grid(kernel_type='cosine', zero_diag_flag=True, kernel_normal=False, bList=bList, wList=wList, pList=pList)
     #run_testset()
