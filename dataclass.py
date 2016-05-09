@@ -63,6 +63,19 @@ class DataClass:
         elif self.kernel_type == 'rbf':
             return rbf_kernel(data, gamma=parameters['gamma'])
 
+    ''' do the statitcs on the number of non-zero entries (for each block in K)
+     return a 4-element array (#source-source, #source-target, #target-source, #target-target)'''
+    @staticmethod
+    def sparse_K_stat(K, offset):
+        assert len(offset) == 6
+        K_ind = (K != 0)
+        K_ss = K[:offset[2], :offset[2]]
+        K_st = K[:offset[2], offset[2]:]
+        K_ts = K[offset[2]:, :offset[2]]
+        K_tt = K[offset[2]:, offset[2]:]
+        return [K_ss.nnz, K_st.nnz, K_ts.nnz, K_tt.nnz]
+
+
     @staticmethod
     def normalize(K):
         inv_sqrt_row_sum = np.diag( 1.0 / np.sqrt(K.sum(axis=1)) )
@@ -138,7 +151,7 @@ class DataClass:
         #     source_gamma = 1.0 / np.sqrt(source_train_X.shape[1])
         # if target_gamma == None:
         #     target_gamma = 1.0 / np.sqrt(target_train_X.shape[1])
-        
+
         if source_test_X.shape[0] == 0:
             source_data = sp.vstack([source_train_X, source_para_X])
         else:
