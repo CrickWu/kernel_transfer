@@ -71,8 +71,9 @@ def solve_and_eval(y, I, K, offset, w_2):
 # source_data_type: 'full' or 'normal'
 # complete_flag: 1 or 0 (default 0), whether complete K_st and K_ts block of kernel or not
 # zero_diag_flag: whether zero out the diagonal or not
-def grid_search(gList, wList, pList, kernel_type, source_data_type, complete_flag=0, zero_diag_flag=True):
-    dc = DataClass(kernel_type=kernel_type, source_data_type=source_data_type, zero_diag_flag=zero_diag_flag)
+def grid_search(gList, wList, pList, complete_flag=False, zero_diag_flag=False):
+    
+    dc = DataClass(valid_flag=True, zero_diag_flag=zero_diag_flag, kernel_normal=False)
     y, I, K, offset = dc.get_TL_Kernel()
 
     n = len(y)
@@ -146,10 +147,9 @@ def run_testset(kernel_type='cosine', log_2gs=-12, log_2gt=-12, log_2w=-2, log_2
 
 if __name__ == '__main__':
     source_data_type = 'full'
-    # kernel_type = 'rbf'
     kernel_type = 'cosine'
-    complete_flag = 0
-    zero_diag_flag = True
+    complete_flag = False
+    zero_diag_flag = False
 
     if kernel_type == 'rbf':
         gList = np.arange(-20, 0, 2)
@@ -157,17 +157,12 @@ if __name__ == '__main__':
         gList = np.arange(-12, -10, 2)
     else:
         raise ValueError('unknown kernel type')
-
-    wList = np.arange(-12, 2, 2)
-    # wList = np.arange(-12, 8, 2)
-    # wList = np.arange(-6, -4, 2)
-    # pList = np.arange(4, 10, 1)
-    if complete_flag:
-        pList = np.arange(2, 7, 1)
-    else:
-        pList = np.arange(5, 10, 1)
-    # grid_search(gList, wList, pList, kernel_type, source_data_type, complete_flag, zero_diag_flag)
-    run_testset(kernel_type='cosine', log_2w=-12, log_2p=-1, complete_flag=0, zero_diag_flag=True)  # no_comp zero
+    
+    wList = np.arange(-20, 2, 2)
+    #pList = np.arange(2, 10, 2)
+    pList = [-1]
+    grid_search(gList, wList, pList, complete_flag, zero_diag_flag)
+    # run_testset(kernel_type='cosine', log_2w=-6, log_2p=-1, complete_flag=True, zero_diag_flag=True)  # no_comp zero
     # run_testset(kernel_type='cosine', log_2w=-6, log_2p=3, complete_flag=True, zero_diag_flag=True) # comp    zero
     # run_testset(kernel_type='cosine', log_2w=-12, log_2p=-1, complete_flag=False, zero_diag_flag=False) # no_comp no_zero
     # run_testset(kernel_type='cosine', log_2w=-8, log_2p=4, complete_flag=True, zero_diag_flag=False)   # comp no_zero
