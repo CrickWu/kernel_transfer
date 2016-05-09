@@ -69,11 +69,11 @@ class DataClass:
     def sparse_K_stat(K, offset):
         assert len(offset) == 6
         K_ind = (K != 0)
-        K_ss = K[:offset[2], :offset[2]]
-        K_st = K[:offset[2], offset[2]:]
-        K_ts = K[offset[2]:, :offset[2]]
-        K_tt = K[offset[2]:, offset[2]:]
-        return [K_ss.nnz, K_st.nnz, K_ts.nnz, K_tt.nnz]
+        K_ss = K_ind[:offset[2], :offset[2]]
+        K_st = K_ind[:offset[2], offset[2]:]
+        K_ts = K_ind[offset[2]:, :offset[2]]
+        K_tt = K_ind[offset[2]:, offset[2]:]
+        return [K_ss.sum(), K_st.sum(), K_ts.sum(), K_tt.sum()]
 
 
     @staticmethod
