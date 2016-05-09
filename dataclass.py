@@ -38,7 +38,7 @@ class DataClass:
     #   True: use symmetrically normalized W
     #   False: directly use W
     def __init__(self, srcPath=None, tgtPath=None, prlPath=None, valid_flag=True, zero_diag_flag=False, source_data_type='full',
-                source_n_features=100000, target_n_features=200000, kernel_type='cosine', kernel_normal=True,
+                source_n_features=100000, target_n_features=200000, kernel_type='cosine', kernel_normal=False,
                 source_gamma=None, target_gamma=None):
         if srcPath == None:
             self.srcPath = configure_path.srcPath
@@ -161,8 +161,8 @@ class DataClass:
         K[0:offset[2],0:offset[2]] = source_ker
         K[offset[2]:offset[5],offset[2]:offset[5]] = target_ker
         # parallel data
-        K[offset[1]:offset[2],offset[4]:offset[5]] = np.ones([len_X[2], len_X[2]], dtype=np.float)
-        K[offset[4]:offset[5],offset[1]:offset[2]] = np.ones([len_X[2], len_X[2]], dtype=np.float)
+        K[offset[1]:offset[2],offset[4]:offset[5]] = np.diag([1.] * len_X[2], dtype=np.float)
+        K[offset[4]:offset[5],offset[1]:offset[2]] = np.diag([1.] * len_X[2], dtype=np.float)
         if self.zero_diag_flag:
             np.fill_diagonal(K, 0.0)
         if self.kernel_normal:
