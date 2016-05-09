@@ -73,7 +73,7 @@ def solve_and_eval(y, I, K, offset, w_2):
 # source_data_type: 'full' or 'normal'
 # kernel_normal: whether to normalized the W or not
 # zero_diag_flag: whether zero out the diagonal or not
-def grid_diffK(kernel_type='cosine', zero_diag_flag=False, kernel_normal=True, bList=None, wList=None, pList=None):
+def grid(kernel_type='cosine', zero_diag_flag=True, kernel_normal=True, bList=None, wList=None, pList=None):
     dc = DataClass(valid_flag=True, kernel_normal=kernel_normal)
     dc.kernel_type = kernel_type
     dc.zero_diag_flag = zero_diag_flag
@@ -103,22 +103,19 @@ def grid_diffK(kernel_type='cosine', zero_diag_flag=False, kernel_normal=True, b
         K[:offset[2], offset[2]:] = K_st
         K[offset[2]:, :offset[2]] = K_st.T 
         for log2_w in wList:
-            auc, ap, rl = solve_and_eval(y, I, K, offset, 2**log2_w)
-            print('log2_b %3d log2_w %3d log2_p  -1 auc %8f ap %6f rl %6f' %(log2_b, log2_w, auc, ap, rl))
-            if best_auc < auc:
-                best_b = log2_b
-                best_w = log2_w
-                best_p = -1
-
             for log2_p in pList:
-                K_sp = DataClass.sym_sparsify_K(K, 2**log2_p)
+                if log2_p == -1:
+                    K_sp = K
+                else:
+                    K_sp = DataClass.sym_sparsify_K(K, 2**log2_p)
+                K_sp[K_sp < 0] = 0
+                print log2_p, DataClass.sparse_K_stat(K_sp, offset)
                 auc, ap, rl = solve_and_eval(y, I, K_sp, offset, 2**log2_w)
                 print('log2_b %3d log2_w %3d log2_p %3d auc %8f ap %6f rl %6f' %(log2_b, log2_w, log2_p, auc, ap, rl))
                 if best_auc < auc:
                     best_b = log2_b
                     best_w = log2_w
                     best_p = log2_p
-
     print('best parameters: log2_b %3d log2_w %3d log2_p %3d auc %6f' \
             % (best_b, best_w, best_p, best_auc))
 
@@ -160,8 +157,8 @@ if __name__ == '__main__':
     kernel_type = 'cosine'
     zero_diag_flag = True
 
-    bList = np.arange(-14, -4, 2)
-    wList = np.arange(-14, 0, 2) 
-    pList = np.arange(0, 12, 2)
-    #grid_diffK(kernel_type='cosine', zero_diag_flag=False, kernel_normal=True, bList=bList, wList=wList, pList=pList)
-    run_testset()
+    bList = np.arange(-14, -12, 2)
+    wList = np.arange(-12, -10, 2) 
+    pList = np.arange(-1, 11, 2)
+    grid(kernel_type='cosine', zero_diag_flag=False, kernel_normal=True, bList=bList, wList=wList, pList=pList)
+    #run_testset()
