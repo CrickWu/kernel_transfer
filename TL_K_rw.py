@@ -8,6 +8,7 @@
 
 import sys
 import numpy as np
+import math
 from sklearn.datasets import load_svmlight_file
 from sklearn.metrics import average_precision_score
 from sklearn.metrics import roc_auc_score
@@ -65,6 +66,32 @@ def solve_and_eval(y, I, K, offset, w_2):
     return auc, ap, rl
 
 
+def nCk(n,k):
+    f = math.factorial
+    return f(n) / f(k) / f(n-k)
+
+# alpha step random walk
+def get_K_rw(K_rw, offset, alpha=1):
+    W_s = K_rw[:offset[2], :offset[2]]
+    #W_s = normalize(W_s, norm='l1', axis=1) 
+    W_t = K_rw[offset[2]:, offset[2]:]
+    #W_t = normalize(W_t, norm='l1', axis=0)
+    n_s = W_s.shape[0]
+    n_t = W_t.shape[0]
+    Y_st = K_rw[:offset[2], offset[2]:] 
+    K_st = np.zeros((n_s,n_t))
+    #K_st = Y_st
+    for i in xrange(0, alpha+1):
+        tmp1 = np.linalg.matrix_power(W_s,i)
+        tmp2 = np.linalg.matrix_power(W_t,alpha-i)
+        K_st += nCk(alpha,i)*tmp1.dot(Y_st.dot(tmp2)) 
+    #K_st = K_st / np.max(K_st)
+    K_st[offset[1]:, (offset[4]-offset[2]):] /= 2.0
+    
+    K_rw[:offset[2], offset[2]:] = K_st
+    K_rw[offset[2]:, :offset[2]] = K_st.T
+    return K_rw
+
 # grid search hyperparameter on valid set
 # aList: beta for exp kernel
 # wList: weight for Manifold regularization term
@@ -73,61 +100,58 @@ def solve_and_eval(y, I, K, offset, w_2):
 # source_data_type: 'full' or 'normal'
 # kernel_normal: whether to normalized the W or not
 # zero_diag_flag: whether zero out the diagonal or not
-def grid_rwK(kernel_type='cosine', zero_diag_flag=True, kernel_normal=False, aList=None, wList=None, pList=None):
+def grid(kernel_type='cosine', zero_diag_flag=False, kernel_normal=False, aList=None, wList=None, pList=None):
     dc = DataClass(valid_flag=True, kernel_normal=kernel_normal)
     dc.kernel_type = kernel_type
     dc.zero_diag_flag = zero_diag_flag
     y, I, K, offset = dc.get_TL_Kernel()
-
-    # run eigen decomposition on K
-    W_s = K[:offset[2], :offset[2]]
-    W_t = K[offset[2]:, offset[2]:]
-    n_s = W_s.shape[0]
-    n_t = W_t.shape[0]
-
+    
     best_a = -1
     best_w = -1
     best_p = -1
     best_auc = -1
-    for log2_a in aList:
-        alpha = 2**log2_a 
-        # two step rankdom walk
-        K_ss = np.diag(np.ones(n_s)) + alpha*W_s #+ (alpha**2/2.0)*W_s.dot(W_s)
-        K_tt = np.diag(np.ones(n_t)) + alpha*W_t #+ (alpha**2/2.0)*W_t.dot(W_t)
-        Y_st = K[:offset[2], offset[2]:]
-        K_st = K_ss.dot(Y_st.dot(K_tt))
-         
-        K[:offset[2], offset[2]:] = K_st
-        K[offset[2]:, :offset[2]] = K_st.T 
-        
+    for alpha in aList:
+        K_rw = K.copy()
+        K_rw = get_K_rw(K_rw, offset, alpha=alpha)
+ 
         for log2_w in wList:
-            auc, ap, rl = solve_and_eval(y, I, K, offset, 2**log2_w)
-            print('log2_a %3d log2_w %3d log2_p  -1 auc %8f ap %6f rl %6f' %(log2_a, log2_w, auc, ap, rl))
-            if best_auc < auc:
-                best_a = log2_a
-                best_w = log2_w
-                best_p = -1
-                best_auc = auc
-            
             for log2_p in pList:
-                K_sp = DataClass.sym_sparsify_K(K, 2**log2_p)
+                if log2_p == -1:
+                    K_sp = K_rw
+                else:
+                    K_sp = DataClass.sym_sparsify_K(K_rw, 2**log2_p)
+                #print DataClass.sparse_K_stat(K_sp, offset)
                 auc, ap, rl = solve_and_eval(y, I, K_sp, offset, 2**log2_w)
-                print('log2_a %3d log2_w %3d log2_p %3d auc %8f ap %6f rl %6f' %(log2_a, log2_w, log2_p, auc, ap, rl))
+                print('alpha %3d log2_w %3d log2_p %3d auc %8f ap %6f rl %6f' %(alpha, log2_w, log2_p, auc, ap, rl))
                 if best_auc < auc:
-                    best_a = log2_a
+                    best_a = alpha
                     best_w = log2_w
                     best_p = log2_p
                     best_auc = auc
     
-    print('best parameters: log2_a %3d log2_w %3d log2_p %3d auc %6f' \
+    print('best parameters: alpha %3d log2_w %3d log2_p %3d auc %6f' \
             % (best_a, best_w, best_p, best_auc))
 
 
+def run_testset(kernel_type='cosine', zero_diag_flag=False, kernel_normal=False, alpha=None, log2_w=None, log2_p=None):
+    dc = DataClass(valid_flag=False, kernel_normal=kernel_normal)
+    dc.kernel_type = kernel_type
+    dc.zero_diag_flag = zero_diag_flag
+    y, I, K, offset = dc.get_TL_Kernel()
+    
+    K_rw = K.copy()
+    K_rw = get_K_rw(K_rw, offset, alpha=alpha)
+    if log2_p == -1:
+        K_sp = K_rw
+    else:
+        K_sp = DataClass.sym_sparsify_K(K_rw, 2**log2_p)
+    auc, ap, rl = solve_and_eval(y, I, K_sp, offset, 2**log2_w)
+    print('test set: auc %8f ap %6f rl %6f' %(auc, ap, rl))
 
 if __name__ == '__main__':
-    source_data_type = 'full'
-    kernel_type = 'cosine'
-    aList = np.arange(-3, 0, 1)
-    wList = np.arange(-12, -4, 2) 
-    pList = np.arange(2, 12, 2)
-    grid_rwK(kernel_type='cosine', zero_diag_flag=False, kernel_normal=False, aList=aList, wList=wList, pList=pList)
+    aList = np.arange(1,6,1)
+    wList = np.arange(-12, -10, 2) 
+    pList = np.arange(-1, 11, 2)
+    #grid(kernel_type='cosine', zero_diag_flag=False, kernel_normal=False, aList=aList, wList=wList, pList=pList)
+    run_testset(kernel_type='cosine', zero_diag_flag=False, kernel_normal=False, alpha=1, log2_w=-6, log2_p=3)
+

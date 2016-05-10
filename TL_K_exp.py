@@ -121,11 +121,11 @@ def grid(kernel_type='cosine', zero_diag_flag=True, kernel_normal=False, bList=N
                     best_b = log2_b
                     best_w = log2_w
                     best_p = log2_p
+                return
     print('best parameters: log2_b %3d log2_w %3d log2_p %3d auc %6f' \
             % (best_b, best_w, best_p, best_auc))
 
-
-def run_testset(kernel_type='cosine', zero_diag_flag=True, kernel_normal=False, log2_b=-14, log2_w=-8, log2_p=8):
+def run_testset(kernel_type='cosine', zero_diag_flag=True, kernel_normal=False, log2_b=None, log2_w=None, log2_p=None):
     dc = DataClass(valid_flag=False, kernel_normal=kernel_normal)
     dc.kernel_type = kernel_type
     dc.zero_diag_flag = zero_diag_flag
@@ -142,7 +142,7 @@ def run_testset(kernel_type='cosine', zero_diag_flag=True, kernel_normal=False, 
         K_sp = K_exp
     else:
         K_sp = DataClass.sym_sparsify_K(K_exp, 2**log2_p)
-    auc, ap, rl = solve_and_eval(y, I, K, offset, 2**log2_w)
+    auc, ap, rl = solve_and_eval(y, I, K_sp, offset, 2**log2_w)
     print('test set: auc %6f ap %6f rl %6f' % (auc, ap, rl))
 
 
@@ -150,5 +150,5 @@ if __name__ == '__main__':
     bList = np.arange(-20, -8, 2)
     wList = np.arange(-12, -10, 2) 
     pList = np.arange(-1, 11, 2)
-    grid(kernel_type='cosine', zero_diag_flag=True, kernel_normal=False, bList=bList, wList=wList, pList=pList)
-    #run_testset()
+    #grid(kernel_type='cosine', zero_diag_flag=True, kernel_normal=False, bList=bList, wList=wList, pList=pList)
+    run_testset(kernel_type='cosine', zero_diag_flag=True, kernel_normal=False, log2_b=-12, log2_w=-12, log2_p=-1)
