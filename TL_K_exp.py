@@ -16,72 +16,31 @@ from sklearn.metrics import label_ranking_loss
 from dataclass import DataClass
 from sklearn.preprocessing import normalize
 from sklearn.preprocessing import scale
-import scipy.sparse as sp 
+from solve import solve_and_eval
+import scipy.sparse as sp
 import cvxopt
 from cvxopt import matrix
 np.random.seed(123)
 
-
-def evalulate(y_true, y_prob):
-    y_true = (y_true + 1) / 2.0
-    auc = roc_auc_score(y_true, y_prob)
-    ap = label_ranking_average_precision_score([y_true], [y_prob])
-    rl = label_ranking_loss([y_true], [y_prob])
-    return auc, ap, rl
-
-def solve_and_eval(y, I, K, offset, w_2):
-    # closed form
-    n = y.shape[0]
-    D = np.diag( np.sum(K, axis=1) )
-    lap = D - K
-
-    P = lap * w_2 + np.diag( I )
-    q = -I * y
-    G = -np.diag(np.ones(n))
-    h = np.zeros(n)
-    #f = np.linalg.lstsq(P,-q)[0]
-    # using cvxopt quadratic programming:
-    #    min_x  1/2 xTPx + qTx
-    #    s.t.   Gx <= h
-    #           Ax = b
-    # reference: https://github.com/cvxopt/cvxopt
-    #            http://cvxopt.org/examples/
-    cvxopt.solvers.options['show_progress'] = False
-    sol = cvxopt.solvers.qp(matrix(P), matrix(q), matrix(G), matrix(h))
-    f = np.array(sol['x'])[:,0]
-
-    # for calculating ap
-    start_offset = offset[3]
-    end_offset = offset[4]
-
-    #loss1 = ((f - y)**2 * I).sum()
-    #loss2 = f.T.dot(lap).dot(f) * w_2
-    #loss = loss1+loss2
-
-    #ap = average_precision_score(y[start_offset:end_offset], f[start_offset:end_offset])
-    y_true = y[start_offset:end_offset]
-    y_prob = f[start_offset:end_offset]
-    auc, ap, rl = evalulate(y_true, y_prob)
-    return auc, ap, rl
 
 def eigen_decompose(K, offset, max_k=128):
     W_s = K[:offset[2], :offset[2]]
     W_t = K[offset[2]:, offset[2]:]
     v_s, Q_s = sp.linalg.eigsh(W_s, k=max_k)
     v_t, Q_t = sp.linalg.eigsh(W_t, k=max_k)
-    return v_s, Q_s, v_t, Q_t 
+    return v_s, Q_s, v_t, Q_t
 
 def get_K_exp(K_exp, offset, v_s, Q_s, v_t, Q_t, beta, kernel_normal):
     Y_st = K_exp[:offset[2], offset[2]:]
     Lambda_s = np.diag(np.exp(beta*v_s))
     Lambda_t = np.diag(np.exp(beta*v_t))
-    K_ss = Q_s.dot(Lambda_s.dot(Q_s.T)) 
+    K_ss = Q_s.dot(Lambda_s.dot(Q_s.T))
     K_tt = Q_t.dot(Lambda_t.dot(Q_t.T))
     K_st = K_ss.dot(Y_st.dot(K_tt))
     if not kernel_normal:
         K_st = normalize(K_st)
     K_exp[:offset[2], offset[2]:] = K_st
-    K_exp[offset[2]:, :offset[2]] = K_st.T 
+    K_exp[offset[2]:, :offset[2]] = K_st.T
     return K_exp
 
 # grid search hyperparameter on valid set
@@ -99,8 +58,8 @@ def grid(kernel_type='cosine', zero_diag_flag=True, kernel_normal=False, bList=N
     y, I, K, offset = dc.get_TL_Kernel()
 
     # run eigen decomposition on K
-    v_s, Q_s, v_t, Q_t = eigen_decompose(K, offset, max_k=128)    
-    
+    v_s, Q_s, v_t, Q_t = eigen_decompose(K, offset, max_k=128)
+
     best_b = -1
     best_w = -1
     best_p = -1
@@ -129,26 +88,29 @@ def run_testset(kernel_type='cosine', zero_diag_flag=True, kernel_normal=False, 
     dc = DataClass(valid_flag=False, kernel_normal=kernel_normal)
     dc.kernel_type = kernel_type
     dc.zero_diag_flag = zero_diag_flag
+    # dc.source_data_type = 'parallel' # CorrNet test
     y, I, K, offset = dc.get_TL_Kernel()
-    
+
     # run eigen decomposition on K
-    v_s, Q_s, v_t, Q_t = eigen_decompose(K, offset, max_k=128)    
- 
+    v_s, Q_s, v_t, Q_t = eigen_decompose(K, offset, max_k=128)
+    # v_s, Q_s, v_t, Q_t = eigen_decompose(K, offset, max_k=5)
+
     beta = 2**log2_b
     K_exp = K.copy()
     K_exp = get_K_exp(K_exp, offset, v_s, Q_s, v_t, Q_t, beta, kernel_normal)
-    
+
     if log2_p == -1:
         K_sp = K_exp
     else:
         K_sp = DataClass.sym_sparsify_K(K_exp, 2**log2_p)
+
     auc, ap, rl = solve_and_eval(y, I, K_sp, offset, 2**log2_w)
     print('test set: auc %6f ap %6f rl %6f' % (auc, ap, rl))
 
 
 if __name__ == '__main__':
     bList = np.arange(-20, -8, 2)
-    wList = np.arange(-12, -10, 2) 
+    wList = np.arange(-12, -10, 2)
     pList = np.arange(-1, 11, 2)
     #grid(kernel_type='cosine', zero_diag_flag=True, kernel_normal=False, bList=bList, wList=wList, pList=pList)
     run_testset(kernel_type='cosine', zero_diag_flag=True, kernel_normal=False, log2_b=-12, log2_w=-12, log2_p=-1)

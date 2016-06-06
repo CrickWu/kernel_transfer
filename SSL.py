@@ -13,55 +13,11 @@ from sklearn.metrics import roc_auc_score
 from sklearn.metrics import label_ranking_average_precision_score
 from sklearn.metrics import label_ranking_loss
 from dataclass import DataClass
+from solve import solve_and_eval
 
 import cvxopt
 from cvxopt import matrix
 np.random.seed(123)
-
-
-def evalulate(y_true, y_prob):
-    y_true = (y_true + 1) / 2.0
-    auc = roc_auc_score(y_true, y_prob)
-    ap = label_ranking_average_precision_score([y_true], [y_prob])
-    rl = label_ranking_loss([y_true], [y_prob])
-    return auc, ap, rl
-
-
-def solve_and_eval(y, I, K, offset, w_2):
-    # closed form
-    n = y.shape[0]
-    D = np.diag( K.sum(1) )
-    lap = D - K
-
-    P = lap * w_2 + np.diag( I )
-    q = -I * y
-    G = -np.diag(np.ones(n))
-    h = np.zeros(n)
-    #f = np.linalg.lstsq(P,-q)[0]
-    # using cvxopt quadratic programming:
-    #    min_x  1/2 xTPx + qTx
-    #    s.t.   Gx <= h
-    #           Ax = b
-    # reference: https://github.com/cvxopt/cvxopt
-    #            http://cvxopt.org/examples/
-    cvxopt.solvers.options['show_progress'] = False
-    sol = cvxopt.solvers.qp(matrix(P), matrix(q), matrix(G), matrix(h))
-    f = np.array(sol['x'])[:,0]
-
-    # for calculating ap
-    start_offset = offset[0]
-    end_offset = offset[1]
-
-    #loss1 = ((f - y)**2 * I).sum()
-    #loss2 = f.T.dot(lap).dot(f) * w_2
-    #loss = loss1+loss2
-
-    #ap = average_precision_score(y[start_offset:end_offset], f[start_offset:end_offset])
-    y_true = y[start_offset:end_offset]
-    y_prob = f[start_offset:end_offset]
-    auc, ap, rl = evalulate(y_true, y_prob)
-    return auc, ap, rl
-
 
 # grid search hyperparameter on valid set
 # gList: gamma for rbf kernel.
@@ -148,4 +104,4 @@ if __name__ == '__main__':
     pList = np.arange(4, 10, 1)
     # grid_search(gList, wList, pList, kernel_type, zero_diag_flag=True)
     run_testset(kernel_type='cosine', log_2g=-12, log_2w=-8, log_2p=6, zero_diag_flag=True) # zero_diag
-    run_testset(kernel_type='cosine', log_2g=-12, log_2w=-12, log_2p=6, zero_diag_flag=False) # non_zero_diag
+    # run_testset(kernel_type='cosine', log_2g=-12, log_2w=-12, log_2p=6, zero_diag_flag=False) # non_zero_diag

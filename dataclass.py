@@ -130,9 +130,16 @@ class DataClass:
         target_para = self.prlPath + 'prlTgt.libsvm'
         if self.valid_flag == False:
             target_test = self.tgtPath + '.tst.libsvm'
-        K = self._get_TL_Kernel(source_train, source_test, source_para,
+        y, I, K, offset = self._get_TL_Kernel(source_train, source_test, source_para,
                                target_train, target_test, target_para)
-        return K
+        # # normalize y (-1 -> 1)
+        # def to_0(x):
+        #     if x == -1:
+        #         return 0
+        #     else:
+        #         return x
+        # y = np.asarray(map(to_0, y))
+        return y, I, K, offset
 
     def _get_TL_Kernel(self, source_train, source_test, source_para,
                              target_train, target_test, target_para):
@@ -167,8 +174,6 @@ class DataClass:
         len_X = [source_train_X.shape[0] , source_test_X.shape[0] , source_para_X.shape[0]
                 , target_train_X.shape[0] , target_test_X.shape[0] , target_para_X.shape[0]]
         offset = np.cumsum(len_X)
-
-        # print 'offset\t', offset
 
         # K initialize
         n = offset[5]
@@ -237,6 +242,14 @@ class DataClass:
             np.fill_diagonal(K, 0.0)
         if self.kernel_normal:
             K = DataClass.normalize(K)
+
+        # # normalize y (-1 -> 1)
+        # def to_0(x):
+        #     if x == -1:
+        #         return 0
+        #     else:
+        #         return x
+        # y = np.asarray(map(to_0, y))
         return y, I, K, offset
 
     @staticmethod
@@ -260,7 +273,7 @@ class DataClass:
 
 
     def get_TL_Kernel_completeOffDiag(self):
-        y, I, K, offset = self.load_data()
+        y, I, K, offset = self.get_TL_Kernel()
         K = DataClass.complete_TL_Kernel(K, offset)
         return y, I, K, offset
 
