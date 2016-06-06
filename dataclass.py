@@ -42,10 +42,16 @@ class DataClass:
                 source_gamma=None, target_gamma=None):
         if srcPath == None:
             self.srcPath = configure_path.srcPath
+        else:
+            self.srcPath = srcPath
         if tgtPath == None:
             self.tgtPath = configure_path.tgtPath
+        else:
+            self.tgtPath = tgtPath
         if prlPath == None:
             self.prlPath = configure_path.prlPath
+        else:
+            self.prlPath = prlPath
         self.source_n_features = source_n_features
         self.target_n_features = target_n_features
         self.kernel_type = kernel_type
@@ -86,7 +92,7 @@ class DataClass:
     @staticmethod
     def sparsify_K(K, nn):
         ret_K = np.zeros(K.shape)
-        for i in xrange(K.shape[0]):
+        for i in range(K.shape[0]):
             index = np.argsort(K[i, :])[-nn:]
             ret_K[i, index] = K[i, index]
         return ret_K
@@ -159,8 +165,10 @@ class DataClass:
         # source_ker = rbf_kernel(source_data, gamma=self.source_gamma)
         source_ker = self.kernel(source_data, gamma=self.source_gamma)
 
-
-        target_data = sp.vstack([target_train_X, target_test_X, target_para_X])
+        if target_train_X.shape[0] == 0:
+            target_data = sp.vstack([target_test_X, target_para_X])
+        else:
+            target_data = sp.vstack([target_train_X, target_test_X, target_para_X])
         # target_ker = rbf_kernel(target_data, gamma=self.target_gamma)
         target_ker = self.kernel(target_data, gamma=self.target_gamma)
 
@@ -251,8 +259,8 @@ class DataClass:
         K[offset[2]:offset[4], offset[1]:offset[2]] = K[offset[2]: offset[4], offset[4]:offset[5]]
         K[offset[4]:offset[5], offset[1]:offset[2]] = (K[offset[1]: offset[2], offset[1]:offset[2]] +  K[offset[4]: offset[5], offset[4]:offset[5]]) / 2
         # zero_based should impose 1 to parallel diagonal elements
-        xcoos = xrange(offset[4], offset[5])
-        ycoos = xrange(offset[1], offset[2])
+        xcoos = range(offset[4], offset[5])
+        ycoos = range(offset[1], offset[2])
         K[xcoos, ycoos] = 1.0
 
         K[0:offset[2], offset[2]:offset[5]] = K[offset[2]:offset[5], 0:offset[2]].transpose()
@@ -276,8 +284,7 @@ if __name__ == '__main__':
     target_test = tgtPath + '.tst.libsvm'
     target_para = prlPath + 'tgt.toy.libsvm'
 
-    y, I, K = load_data(source_train, source_test, source_para,
-                  target_train, target_test, target_para)
-    print K[1,2], K[1000, 999], K[1891,K.shape[1]-1]
-    print sum(I)
-    print sum(y)
+    y, I, K = load_data(source_train, source_test, source_para, target_train, target_test, target_para)
+    #print K[1,2], K[1000, 999], K[1891,K.shape[1]-1]
+    #print sum(I)
+    #print sum(y)
