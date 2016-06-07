@@ -67,17 +67,42 @@ def cvxopt_solver(y, I, K, offset, w_2):
     y_prob = f[start_offset:end_offset]
     return y_true, y_prob
 
+# return obj, grad of logistic loss
+def logistic(f, y, I):
+    inter_exp = np.exp(- f * y)
+    # calculate active set and objective value
+    J = I
+    grad = -y * inter_exp / (1 + inter_exp) * J / np.log(2)
+    obj = np.sum(np.log2(1 + inter_exp) * J)
+    return obj, grad
 
-# sgd solver for L2-loss
+# return obj, grad of hinge loss
+def hinge(f, y, I):
+    dv = 1 - f * y
+    # calculate active set and objective value
+    J = np.asarray((I > 0) * (dv > 0), dtype=np.int)
+    grad = -y * J
+    obj = np.sum(np.maximum(dv * J, 0.0))
+    return obj, grad
+
+# return obj, grad of l2 loss
+def l2(f, y, I):
+    dv = 1 - f * y
+    # calculate active set and objective value
+    J = np.asarray((I > 0) * (dv > 0), dtype=np.int)
+    grad = 2 * (f - y) * J # should multiply by 2
+    obj = np.sum(dv ** 2 * J)
+    return obj, grad
+
 # I use graident descent at this point
-def sgd_l2(y, I, K, offset, gamma=2**(-10), nr_epoch=100, stepsize=2**(-1)):
+def sgd_solver(y, I, K, offset, gamma=2**(-10), nr_epoch=100, stepsize=2**(-1), loss='l2'):
     n = y.shape[0]
     batch_size = n
-    nr_batch = n // batch_size
+    nr_batch = (n + batch_size - 1) // batch_size
     D = np.diag( np.sum(K, axis=1) )
     lap = D - K
-    f = np.ones(n)
-    grad = np.zeros(n)
+    f = np.random.rand(n) * 2 - 1
+    # f = np.ones(n)
     hist_grad = 0.0
 
     for eidx in range(nr_epoch):
@@ -85,17 +110,22 @@ def sgd_l2(y, I, K, offset, gamma=2**(-10), nr_epoch=100, stepsize=2**(-1)):
         np.random.shuffle(idxList)
         for idx in idxList:
             start, end = idx*batch_size, (idx+1)*batch_size if idx < nr_batch else n
-            
-            # calculate active set and objective value
-            obj = np.dot(f, np.dot(lap, f)) * gamma
-            J = np.zeros(n, dtype='int64')
-            for i in range(n):
-                dv = 1.0 - f[i]*y[i]
-                if I[i] > 0 and dv > 0:
-                    J[i] = 1
-                    obj += (dv**2)
-            # calculate gradient and update f by adagrad
-            grad = gamma*np.dot(lap, f) + J*f - J*y
+            tmp_I = np.zeros(n)
+            tmp_I [start : end] = 1
+
+            if loss == 'l2':
+                lobj, lgrad = l2(f, y, tmp_I)
+            elif loss == 'hinge':
+                lobj, lgrad = hinge(f, y, tmp_I)
+            elif loss == 'logistic':
+                lobj, lgrad = logistic(f, y, tmp_I)
+            else:
+                raise Exception('unknown loss function')
+                sys.exit(-1)
+
+            obj = np.dot(f, np.dot(lap, f)) * gamma + lobj
+            grad = gamma*np.dot(lap, f) + lgrad
+
             gnorm = np.sqrt(np.sum(grad**2))
             hist_grad += grad**2
             grad = grad / (1e-6 + np.sqrt(hist_grad))
@@ -155,7 +185,7 @@ def run_one(srcPath=None, tgtPath=None, prlPath=None,
     K_exp = get_K_exp_by_eigen(K, offset, v_s, Q_s, v_t, Q_t, beta)
     K_exp[K_exp<0] = 0
     #y_true, y_prob = cvxopt_solver(y, I, K_exp, offset, wreg)
-    y_true, y_prob = sgd_l2(y, I, K_exp, offset, gamma=2**(-10), nr_epoch=1000, stepsize=2**(-1))
+    y_true, y_prob = sgd_solver(y, I, K_exp, offset, gamma=2**(-10), nr_epoch=1000, stepsize=2**(-1))
     auc, acc = eval_binary(y_true, y_prob)
     return auc, acc
 
@@ -165,15 +195,27 @@ def run_cls():
     dataPath = '/tmp2/b99902019/AAAI16/data/cls/'
     tgt = ['de', 'fr', 'jp']
     tgtSize = [2, 4, 8, 16, 32]
-    #tgtSize= [2]
     domain = ['books', 'dvd', 'music']
     dimDict = {'en':60244, 'de':185922, 'fr':59906, 'jp':75809}
     nr_seed = 3
+    ## test code
+    dataPath = '/Users/crickwu/Work/Research Transfer Learning/code/'
+    tgt = ['de', 'fr', 'jp']
+    tgtSize= [2]
+    nr_seed = 1
+    ## test code
     for d_s in domain:
         for t in tgt:
             for d_t in domain:
                 if d_s == d_t:
                     continue
+                ## test code
+                if not (d_s == 'books' and d_t == 'music' and t == 'jp'):
+                # if not (d_s == 'books' and d_t == 'dvd' and t == 'de'):
+                # if not (d_s == 'books' and d_t == 'music' and t == 'jp')
+                # or not (d_s == 'books' and d_t == 'dvd' and t == 'de'):
+                    continue
+                ## test code
                 acc_result= []
                 auc_result = []
                 for p in tgtSize:
@@ -182,7 +224,8 @@ def run_cls():
                     for seed in xrange(0, nr_seed):
                         dirPath = dataPath + 'cls_seed_%d/en_%s_%s_%s/' % (seed, d_s, t, d_t)
                         assert(os.path.isdir(dirPath))
-                        srcPath = dirPath + 'src.1024'
+                        # srcPath = dirPath + 'src.1024'
+                        srcPath = dirPath + 'src'
                         tgtPath = dirPath + 'tgt.%d' % (p)
                         prlPath = dirPath
                         sys.stderr.write('%s\n' % (tgtPath))
