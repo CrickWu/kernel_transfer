@@ -112,6 +112,7 @@ def sgd_solver(y, I, K, offset, gamma=2**(-10), nr_epoch=100, stepsize=2**(-1), 
             start, end = idx*batch_size, (idx+1)*batch_size if idx < nr_batch else n
             tmp_I = np.zeros(n)
             tmp_I [start : end] = 1
+            tmp_I = tmp_I * I
 
             if loss == 'l2':
                 lobj, lgrad = l2(f, y, tmp_I)
