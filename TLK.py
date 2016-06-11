@@ -65,7 +65,7 @@ def cvxopt_solver(y, I, K, offset, w_2):
 
     y_true = y[start_offset:end_offset]
     y_prob = f[start_offset:end_offset]
-    return y_true, y_prob
+    return y_true, y_prob, f
 
 # return obj, grad of logistic loss
 def logistic(f, y, I):
@@ -94,6 +94,30 @@ def l2(f, y, I):
     obj = np.sum(dv ** 2 * J)
     return obj, grad
 
+def gen_weight_lap(K, offset):
+    n = K.shape[0]
+    W_ss = np.zeros((n,n))
+    W_st = np.zeros((n,n))
+    W_ts = np.zeros((n,n))
+    W_tt = np.zeros((n,n))
+    W_ss[:offset[2], :offset[2]] = K[:offset[2], :offset[2]]
+    W_st[:offset[2], offset[2]:] = K[:offset[2], offset[2]:]
+    W_ts[offset[2]:, :offset[2]] = K[offset[2]:, :offset[2]]
+    W_tt[offset[2]:, offset[2]:] = K[offset[2]:, offset[2]:]
+    D_ss = np.diag( np.sum(W_ss, axis=1) )
+    D_st = np.diag( np.sum(W_st, axis=1) )
+    D_ts = np.diag( np.sum(W_ts, axis=1) )
+    D_tt = np.diag( np.sum(W_tt, axis=1) )
+
+    alpha = 0.5; beta = 2; gamma = 1;
+    lap = np.zeros((n,n))
+    lap = alpha*(D_ss-W_ss) + beta*(D_st-W_st) + beta*(D_ts-W_ts) + gamma*(D_tt-W_tt)
+
+    #v, Q = scipy.linalg.eigh(lap)
+    #if np.all(v > -1e-10):
+    #    raise Warning('This lapcian is not PSD...')
+    return lap
+
 # I use graident descent at this point
 def sgd_solver(y, I, K, offset, gamma=2**(-10), nr_epoch=100, stepsize=2**(-1), loss='l2'):
     n = y.shape[0]
@@ -101,6 +125,7 @@ def sgd_solver(y, I, K, offset, gamma=2**(-10), nr_epoch=100, stepsize=2**(-1), 
     nr_batch = (n + batch_size - 1) // batch_size
     D = np.diag( np.sum(K, axis=1) )
     lap = D - K
+    lap = gen_weight_lap(K, offset)
     f = np.random.rand(n) * 2 - 1
     # f = np.ones(n)
     hist_grad = 0.0
@@ -124,14 +149,15 @@ def sgd_solver(y, I, K, offset, gamma=2**(-10), nr_epoch=100, stepsize=2**(-1), 
                 raise Exception('unknown loss function')
                 sys.exit(-1)
 
-            obj = np.dot(f, np.dot(lap, f)) * gamma + lobj
-            grad = gamma*np.dot(lap, f) + lgrad
+            reg = np.dot(f, np.dot(lap, f)) * gamma
+            obj = reg + lobj
+            grad = 2*gamma*np.dot(lap, f) + lgrad
 
             gnorm = np.sqrt(np.sum(grad**2))
             hist_grad += grad**2
             grad = grad / (1e-6 + np.sqrt(hist_grad))
             f = f - stepsize*grad
-            sys.stderr.write('epoch %d obj %f gnorm %f\n' % (eidx, obj, gnorm))
+            sys.stderr.write('epoch %d reg %f loss %f obj %f gnorm %f\n' % (eidx, reg, lobj, obj, gnorm))
         if gnorm < 1e-3:
             break
 
@@ -141,12 +167,22 @@ def sgd_solver(y, I, K, offset, gamma=2**(-10), nr_epoch=100, stepsize=2**(-1), 
 
     y_true = y[start_offset:end_offset]
     y_prob = f[start_offset:end_offset]
-    return y_true, y_prob
+    return y_true, y_prob, f
 
+
+def normalize_K(K):
+    tmp = np.sum(K, axis=1)
+    inv_sqrt_row_sum = np.diag( 1.0 / np.sqrt(tmp))
+    tmp = np.dot(K, inv_sqrt_row_sum)
+    tmp = np.dot(inv_sqrt_row_sum, tmp)
+    assert(np.isnan(tmp).any() == False)
+    return tmp
 
 def eigen_decompose(K, offset, max_k=None):
     W_s = K[:offset[2], :offset[2]]
+    W_s = normalize_K(W_s)
     W_t = K[offset[2]:, offset[2]:]
+    W_t = normalize_K(W_t)
     if max_k == None:
         v_s, Q_s = scipy.linalg.eigh(W_s)
         v_t, Q_t = scipy.linalg.eigh(W_t)
@@ -157,53 +193,99 @@ def eigen_decompose(K, offset, max_k=None):
     return v_s, Q_s, v_t, Q_t
 
 
-def get_K_exp_by_eigen(K, offset, v_s, Q_s, v_t, Q_t, beta):
+def get_K_exp_by_eigen(K, offset, v_s, Q_s, v_t, Q_t):
     K_exp = K.copy()
     Y_st = K_exp[:offset[2], offset[2]:]
-    Lambda_s = np.diag(np.exp(beta*v_s))
-    Lambda_t = np.diag(np.exp(beta*v_t))
+    alpha_s = 2**(-4); alpha_t = 2**(-4)
+    Lambda_s = np.diag(np.exp(alpha_s*v_s))
+    Lambda_t = np.diag(np.exp(alpha_t*v_t))
     K_ss = Q_s.dot(Lambda_s.dot(Q_s.T)) #+ np.identity(Q_s.shape[0]) - Q_s.dot(Q_s.T)
     K_tt = Q_t.dot(Lambda_t.dot(Q_t.T)) #+ np.identity(Q_t.shape[0]) - Q_t.dot(Q_t.T)
     K_st = K_ss.dot(Y_st.dot(K_tt))
+    K_st[K_st < 0] = 0
     K_st = normalize(K_st, norm='l2', axis=1)
     K_exp[:offset[2], offset[2]:] = K_st
     K_exp[offset[2]:, :offset[2]] = K_st.T
     return K_exp
 
 
+def debug(K, offset, y, I, f):
+    D = np.diag( np.sum(K, axis=1) )
+    L = D - K
+    reg = f.dot(L.dot(f))
+    L_ss = L[:offset[2], :offset[2]]
+    L_st = L[:offset[2], offset[2]:]
+    L_tt = L[offset[2]:, offset[2]:]
+    f_s = f[:offset[2]]
+    f_t = f[offset[2]:]
+    reg_ss = f_s.dot(L_ss.dot(f_s))
+    reg_st = f_s.dot(L_st.dot(f_t))
+    reg_tt = f_t.dot(L_tt.dot(f_t))
+    print('calculate from L, reg %f: reg_ss %f reg_st %f reg_tt %f' % (reg, reg_ss, reg_st, reg_tt))
+
+    reg = 0.0
+    for i in range(y.shape[0]):
+        for j in range(y.shape[0]):
+            reg += K[i,j]*((f[i] - f[j])**2)
+    reg /= 2.0
+
+    reg_ss = 0.0
+    for i in range(offset[2]):
+        for j in range(offset[2]):
+            reg_ss += K[i,j]*((f[i] - f[j])**2)
+    reg_ss /= 2.0
+
+    reg_st = 0.0
+    for i in range(offset[2]):
+        for j in range(offset[2], offset[-1]):
+            reg_st += K[i,j]*((f[i] - f[j])**2)
+    reg_st /= 2.0
+
+    reg_tt = 0.0
+    for i in range(offset[2], offset[-1]):
+        for j in range(offset[2], offset[-1]):
+            reg_tt += K[i,j]*((f[i] - f[j])**2)
+    reg_tt /= 2.0
+    print('calculate from W, reg %f: reg_ss %f reg_st %f reg_tt %f' % (reg, reg_ss, reg_st, reg_tt))
+    #return reg, reg_ss, reg_st, reg_tt
+
+
 def run_one(srcPath=None, tgtPath=None, prlPath=None,
             source_n_features=None, target_n_features=None):
 
     dc = DataClass(srcPath=srcPath, tgtPath=tgtPath, prlPath=prlPath,
-                   valid_flag=False, zero_diag_flag=True, source_data_type='full',
+                   valid_flag=False, zero_diag_flag=False, source_data_type='full',
                    source_n_features=source_n_features, target_n_features=target_n_features,
                    kernel_type='cosine', kernel_normal=False)
     y, I, K, offset = dc.get_TL_Kernel()
+    # make sure diagonal is 1 so that
+    # after normalizing lapliacian,
+    # nan does not happen
+    np.fill_diagonal(K, 1)
 
     # run eigen decomposition on K
     v_s, Q_s, v_t, Q_t = eigen_decompose(K, offset, max_k=128)
-    beta = 2**(-10)
-    K_exp = get_K_exp_by_eigen(K, offset, v_s, Q_s, v_t, Q_t, beta)
-    K_exp[K_exp<0] = 0
-    #y_true, y_prob = cvxopt_solver(y, I, K_exp, offset, wreg)
-    y_true, y_prob = sgd_solver(y, I, K_exp, offset, gamma=2**(-10), nr_epoch=1000, stepsize=2**(-1))
+    K_exp = get_K_exp_by_eigen(K, offset, v_s, Q_s, v_t, Q_t)
+    #y_true, y_prob, f = cvxopt_solver(y, I, K_exp, offset, 2**(-10))
+    #y_true, y_prob, f = sgd_solver(y, I, K_exp, offset, nr_epoch=1000, stepsize=2**(-1), loss='l2')
+    y_true, y_prob, f = sgd_solver(y, I, K_exp, offset, gamma=2**(-10), nr_epoch=1000, stepsize=2**(-1))
     auc, acc = eval_binary(y_true, y_prob)
     return auc, acc
 
 
 def run_cls():
-    #dataPath = '/usr0/home/wchang2/research/NIPS2016/data/cls/'
-    dataPath = '/tmp2/b99902019/AAAI16/data/cls/'
+    dataPath = '/usr0/home/wchang2/research/NIPS2016/data/cls/'
+    #dataPath = '/tmp2/b99902019/AAAI16/data/cls/'
     tgt = ['de', 'fr', 'jp']
     tgtSize = [2, 4, 8, 16, 32]
     domain = ['books', 'dvd', 'music']
     dimDict = {'en':60244, 'de':185922, 'fr':59906, 'jp':75809}
     nr_seed = 3
     ## test code
-    dataPath = '/Users/crickwu/Work/Research Transfer Learning/code/'
+    #dataPath = '/Users/crickwu/Work/Research Transfer Learning/code/'
     tgt = ['de', 'fr', 'jp']
-    tgtSize= [2]
-    nr_seed = 1
+    tgtSize= [2, 8]
+    nr_seed = 10
     ## test code
     for d_s in domain:
         for t in tgt:
