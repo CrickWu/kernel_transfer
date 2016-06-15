@@ -8,7 +8,8 @@ from scipy.sparse import csr_matrix
 
 # If you are on LA server, then it's runable.
 # If not, make sure you install libpmf python interface
-sys.path.append('/usr0/home/wchang2/pkg/libpmf-1.41/python/')
+# sys.path.append('/usr0/home/wchang2/pkg/libpmf-1.41/python/')
+sys.path.append('/usr0/home/yuexinw/pkg/libpmf-1.41/python/')
 import libpmf
 
 
@@ -40,7 +41,7 @@ def evaluate_K(K, K_approx, K_ind):
     return mae, rmse
 
 ''' return the approximated matrix, mae, rmse'''
-def get_sym_K_approx(K, offset, complete_flag=True, d=10, lambda_u=2**(-5), max_iter=10):
+def get_sym_K_approx(K, offset, complete_flag=True, para_weight=1, d=10, lambda_u=2**(-5), max_iter=10):
     param_str = '-k %d -l %f -n 8 -t %d -N 1' % (d, lambda_u, max_iter) # -N 1 is the non-negative option
     if len(offset) == 2: # semi mf
         K_ind = np.ones(K.shape, dtype=np.int)
@@ -54,13 +55,14 @@ def get_sym_K_approx(K, offset, complete_flag=True, d=10, lambda_u=2**(-5), max_
         else:
             K_ind[offset[2]:offset[5],0:offset[1]] = 0
             K_ind[0:offset[1],offset[2]:offset[5]] = 0
-        K_ind[xrange(offset[2],offset[5]),xrange(0,offset[1])] = 1
-        K_ind[xrange(0,offset[1]),xrange(offset[2],offset[5])] = 1
+        K_ind[xrange(offset[4],offset[5]),xrange(offset[1],offset[2])] = para_weight
+        K_ind[xrange(offset[1],offset[2]),xrange(offset[4],offset[5])] = para_weight
         # get the real index for calling train_coo
         row_idx, col_idx = np.where(K_ind)
         obs_val = K[row_idx, col_idx]
+        obs_weight = K_ind[row_idx, col_idx]
         m, n = K.shape
-        model = libpmf.train_coo(row_idx=row_idx, col_idx=col_idx, obs_val=obs_val, m=m, n=n)
+        model = libpmf.train_weighted_coo(row_idx=row_idx, col_idx=col_idx, obs_val=obs_val, obs_weight=obs_weight, m=m, n=n)
 
     mae, rmse = evaluate(K, K_ind, model['H'], model['W'])
     ret_K = model['H'].dot(model['W'].T)

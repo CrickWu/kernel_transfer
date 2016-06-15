@@ -8,10 +8,11 @@ import configure_path
 import sklearn.datasets as sd
 from sklearn.metrics.pairwise import rbf_kernel, cosine_similarity
 
+
 # wrapper for load_svmlight_file in dealing with empty files / no-existing files
 def load_svmlight_file(f, n_features=None, dtype=np.float64, multilabel=False, zero_based='auto', query_id=False):
     if not os.path.exists(f) or (os.stat(f).st_size == 0):
-        assert n_features != None
+        assert n_features is not None
         if multilabel:
             y = [()]
         else:
@@ -19,6 +20,7 @@ def load_svmlight_file(f, n_features=None, dtype=np.float64, multilabel=False, z
         return sp.csr_matrix((0, n_features)), y
     else:
         return sd.load_svmlight_file(f, n_features=n_features, dtype=dtype, multilabel=multilabel, zero_based=zero_based, query_id=query_id)
+
 
 class DataClass:
     # attributes:
@@ -38,17 +40,17 @@ class DataClass:
     #   True: use symmetrically normalized W
     #   False: directly use W
     def __init__(self, srcPath=None, tgtPath=None, prlPath=None, valid_flag=True, zero_diag_flag=False, source_data_type='full',
-                source_n_features=100000, target_n_features=200000, kernel_type='cosine', kernel_normal=False,
-                source_gamma=None, target_gamma=None):
-        if srcPath == None:
+                 source_n_features=100000, target_n_features=200000, kernel_type='cosine', kernel_normal=False,
+                 source_gamma=None, target_gamma=None):
+        if srcPath is None:
             self.srcPath = configure_path.srcPath
         else:
             self.srcPath = srcPath
-        if tgtPath == None:
+        if tgtPath is None:
             self.tgtPath = configure_path.tgtPath
         else:
             self.tgtPath = tgtPath
-        if prlPath == None:
+        if prlPath is None:
             self.prlPath = configure_path.prlPath
         else:
             self.prlPath = prlPath
@@ -59,15 +61,40 @@ class DataClass:
         self.valid_flag = valid_flag
         self.zero_diag_flag = zero_diag_flag
         self.source_data_type = source_data_type
-        if source_gamma == None:
+        if source_gamma is None:
             self.source_gamma = 1.0 / np.sqrt(source_n_features)
-        if target_gamma == None:
+        if target_gamma is None:
             self.target_gamma = 1.0 / np.sqrt(target_n_features)
+
     def kernel(self, data, **parameters):
         if self.kernel_type == 'cosine':
             return cosine_similarity(data)
         elif self.kernel_type == 'rbf':
             return rbf_kernel(data, gamma=parameters['gamma'])
+
+    @staticmethod
+    def reduce_para(y, I, K, offset, num_para):
+        ''' reduce the number of parallel data, given y, I, K, offset, num_para
+        return a 4-element array (y, I, K, offset)'''
+        assert len(offset) == 6
+        # index to delete
+        del_index = range(offset[1] + num_para, offset[2])
+        del_index.extend(range(offset[4] + num_para, offset[5]))
+
+        # update offset
+        diff_num_para = offset[2] - offset[1] - num_para
+        new_offset = offset.copy()
+        for i in xrange(2, 5):
+            new_offset[i] -= diff_num_para
+        new_offset[5] -= 2 * diff_num_para
+        # update K
+        new_K = np.delete(K, del_index, axis=0)
+        new_K = np.delete(new_K, del_index, axis=1)
+        # update y, I
+        new_y = np.delete(y, del_index)
+        new_I = np.delete(I, del_index)
+
+        return new_y, new_I, new_K, new_offset
 
     ''' do the statitcs on the number of non-zero entries (for each block in K)
      return a 4-element array (#source-source, #source-target, #target-source, #target-target)'''
@@ -114,7 +141,7 @@ class DataClass:
     @staticmethod
     def sym_sparsify_K(K, nn):
         K_sp = DataClass.sparsify_K(K, nn)
-        K_sp = (K_sp+K_sp.T) / 2 # in case of non-positive semi-definite
+        K_sp = (K_sp + K_sp.T) / 2  # in case of non-positive semi-definite
         return K_sp
 
     # Load the data
@@ -126,7 +153,7 @@ class DataClass:
     def get_TL_Kernel(self):
         if self.source_data_type == 'normal':
             source_train = self.srcPath + '.trn.libsvm'
-            source_test = self.srcPath + '.val.libsvm' # val is for tuning hyperparameters, in final should report on tst
+            source_test = self.srcPath + '.val.libsvm'  # val is for tuning hyperparameters, in final should report on tst
         elif self.source_data_type == 'full':
             # if srcPath ends with numbers, trail it
             fields = self.srcPath.split('.')
@@ -135,7 +162,7 @@ class DataClass:
             else:
                 srcPath = self.srcPath
             source_train = srcPath + '.full.trn.libsvm'
-            source_test = srcPath + '.full.val.libsvm' # val is for tuning hyperparameters, in final should report on tst
+            source_test = srcPath + '.full.val.libsvm'  # val is for tuning hyperparameters, in final should report on tst
         elif self.source_data_type == 'parallel':
             source_train = '/non/existent/file'
             source_test = '/non/existent/file'
@@ -149,7 +176,7 @@ class DataClass:
         if self.valid_flag == False:
             target_test = self.tgtPath + '.tst.libsvm'
         y, I, K, offset = self._get_TL_Kernel(source_train, source_test, source_para,
-                               target_train, target_test, target_para)
+                                              target_train, target_test, target_para)
         # # normalize y (-1 -> 1)
         # def to_0(x):
         #     if x == -1:
@@ -160,7 +187,7 @@ class DataClass:
         return y, I, K, offset
 
     def _get_TL_Kernel(self, source_train, source_test, source_para,
-                             target_train, target_test, target_para):
+                       target_train, target_test, target_para):
         # source_domain, target_domain dimension should be fixed
 
         source_train_X, source_train_y = load_svmlight_file(source_train, n_features=self.source_n_features)
@@ -299,17 +326,33 @@ class DataClass:
 
 # for testing
 if __name__ == '__main__':
+    dirPath = '/usr0/home/wchang2/research/NIPS2016/data/cls/cls-acl10-postprocess/en_music_de_dvd/'
+    srcPath = dirPath + 'src.256'
+    tgtPath = dirPath + 'tgt.256'
+    prlPath = dirPath
+    source_n_features = 60244
+    target_n_features = 185922
 
+    #  source_train = srcPath + '.trn.libsvm'
+    #  source_test = srcPath + '.tst.libsvm'
+    #  source_para = dirPath + 'prlSrc.libsvm'
 
-    source_train = srcPath + '.trn.libsvm'
-    source_test = srcPath + '.tst.libsvm'
-    source_para = prlPath + 'src.toy.libsvm'
+    #  target_train = tgtPath + '.trn.libsvm'
+    #  target_test = tgtPath + '.tst.libsvm'
+    #  target_para = dirPath + 'prlTgt.libsvm'
 
-    target_train = tgtPath + '.trn.libsvm'
-    target_test = tgtPath + '.tst.libsvm'
-    target_para = prlPath + 'tgt.toy.libsvm'
+    dc = DataClass()
+    dc = DataClass(srcPath=srcPath, tgtPath=tgtPath, prlPath=prlPath,
+                    valid_flag=False, zero_diag_flag=False, source_data_type='full',
+                    source_n_features=source_n_features, target_n_features=target_n_features,
+                    kernel_type='cosine', kernel_normal=False)
+    y, I, K, offset = dc.get_TL_Kernel()
+    print len(y), len(I), K.shape, offset
+    print K[:10, :10]
 
-    y, I, K = load_data(source_train, source_test, source_para, target_train, target_test, target_para)
-    #print K[1,2], K[1000, 999], K[1891,K.shape[1]-1]
-    #print sum(I)
-    #print sum(y)
+    y, I, K, offset = DataClass.reduce_para(y, I, K, offset, 100)
+    print len(y), len(I), K.shape, offset
+    print K[:10, :10]
+    # print K[1,2], K[1000, 999], K[1891,K.shape[1]-1]
+    # print sum(I)
+    # print sum(y)
