@@ -81,6 +81,18 @@ class DataClass:
         K_tt = K_ind[offset[2]:, offset[2]:]
         return [K_ss.sum(), K_st.sum(), K_ts.sum(), K_tt.sum()]
 
+    # keep the `nn` nearest neighbor for each row in upper-left and lower-right block
+    # nn is # nearest neighbor to keep
+    @staticmethod
+    def sparsify_subblock(K, nn, offset):
+        assert len(offset) == 6
+        K_ss = K[:offset[2], :offset[2]]
+        K_tt = K[offset[2]:, offset[2]:]
+        ret_K = K.copy()
+        ret_K[:offset[2], :offset[2]] = sparsify_K(K_ss, offset)
+        ret_K[offset[2]:, offset[2]:] = sparsify_K(K_tt, offset)
+
+        return ret_K
 
     @staticmethod
     def normalize(K):
