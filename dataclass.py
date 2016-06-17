@@ -63,8 +63,12 @@ class DataClass:
         self.source_data_type = source_data_type
         if source_gamma is None:
             self.source_gamma = 1.0 / np.sqrt(source_n_features)
+        else:
+            self.source_gamma = source_gamma
         if target_gamma is None:
             self.target_gamma = 1.0 / np.sqrt(target_n_features)
+        else:
+            self.target_gamma = target_gamma
 
     def kernel(self, data, **parameters):
         if self.kernel_type == 'cosine':
