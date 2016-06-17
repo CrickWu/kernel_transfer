@@ -116,8 +116,8 @@ class DataClass:
         K_ss = K[:offset[2], :offset[2]]
         K_tt = K[offset[2]:, offset[2]:]
         ret_K = K.copy()
-        ret_K[:offset[2], :offset[2]] = sparsify_K(K_ss, offset)
-        ret_K[offset[2]:, offset[2]:] = sparsify_K(K_tt, offset)
+        ret_K[:offset[2], :offset[2]] = DataClass.sym_sparsify_K(K_ss, nn)
+        ret_K[offset[2]:, offset[2]:] = DataClass.sym_sparsify_K(K_tt, nn)
 
         return ret_K
 
